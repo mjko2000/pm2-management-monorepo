@@ -152,14 +152,14 @@ export class PM2Service {
           );
         }
         startConfig.script = "npm";
-        startConfig.args = `run ${service.npmScript} ${service.npmArgs.join(" ")}`;
+        startConfig.args = `run ${service.npmScript} ${service.npmArgs}`;
       } else {
         // Use direct script execution
         const scriptPath = service.sourceDirectory
           ? path.join(repoPath, service.sourceDirectory, service.script)
           : path.join(repoPath, service.script);
         startConfig.script = scriptPath;
-        startConfig.args = service.args || [];
+        startConfig.args = service.args || "";
       }
 
       this.logger.log(

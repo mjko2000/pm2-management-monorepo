@@ -22,14 +22,14 @@ export class Service extends Document {
   @Prop()
   npmScript?: string;
 
-  @Prop({ type: [String] })
-  npmArgs?: string[];
+  @Prop()
+  npmArgs?: string;
 
   @Prop({})
   script: string;
 
-  @Prop({ type: [String] })
-  args?: string[];
+  @Prop()
+  args?: string;
 
   @Prop({ type: [{ name: String, description: String, variables: Object }] })
   environments: Environment[];

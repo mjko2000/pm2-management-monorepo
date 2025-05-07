@@ -138,7 +138,7 @@ export default function Services() {
                     </Typography>
                     {service.npmArgs && service.npmArgs.length > 0 && (
                       <Typography variant="body2" color="text.secondary">
-                        npm Args: {service.npmArgs.join(" ")}
+                        npm Args: {service.npmArgs}
                       </Typography>
                     )}
                   </>

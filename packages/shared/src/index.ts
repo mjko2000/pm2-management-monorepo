@@ -22,12 +22,12 @@ export interface PM2Service {
   branch: string;
   sourceDirectory?: string; // In case the service is in a subdirectory
   script: string;
-  args?: string[];
+  args?: string;
   environments: Environment[];
   activeEnvironment?: string;
   status?: "online" | "stopped" | "errored" | "unknown";
   pm2Id?: number;
-  npmArgs?: string[];
+  npmArgs?: string;
   npmScript?: string;
   useNpm?: boolean;
 }

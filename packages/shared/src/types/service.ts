@@ -6,9 +6,9 @@ export interface PM2Service {
   sourceDirectory?: string;
   useNpm: boolean;
   npmScript?: string;
-  npmArgs?: string[];
+  npmArgs?: string;
   script: string;
-  args?: string[];
+  args?: string;
   environments: Environment[];
   activeEnvironment?: string;
   status: "online" | "stopped" | "errored";

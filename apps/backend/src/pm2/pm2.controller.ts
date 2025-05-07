@@ -22,7 +22,10 @@ class CreateServiceDto
   branch: string;
   script: string;
   sourceDirectory?: string;
-  args?: string[];
+  useNpm?: boolean;
+  npmScript?: string;
+  npmArgs?: string;
+  args?: string;
   environments: Environment[];
   activeEnvironment?: string;
 }
@@ -33,7 +36,10 @@ class UpdateServiceDto implements Partial<IPM2Service> {
   branch?: string;
   script?: string;
   sourceDirectory?: string;
-  args?: string[];
+  useNpm?: boolean;
+  npmScript?: string;
+  npmArgs?: string;
+  args?: string;
 }
 
 class EnvironmentDto implements Environment {

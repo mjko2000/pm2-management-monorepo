@@ -29,9 +29,9 @@ interface NewServiceForm {
   sourceDirectory?: string;
   useNpm: boolean;
   npmScript?: string;
-  npmArgs?: string[];
+  npmArgs?: string;
   script: string;
-  args?: string[];
+  args?: string;
 }
 
 export default function NewService() {
@@ -44,9 +44,9 @@ export default function NewService() {
       sourceDirectory: "",
       useNpm: false,
       npmScript: "",
-      npmArgs: [],
+      npmArgs: "",
       script: "",
-      args: [],
+      args: "",
     },
   });
 
@@ -243,9 +243,7 @@ export default function NewService() {
                           fullWidth
                           helperText="Space-separated arguments to pass to npm (e.g., '-- --port 3000')"
                           onChange={(e) => {
-                            const args = e.target.value
-                              .split(" ")
-                              .filter(Boolean);
+                            const args = e.target.value;
                             setValue("npmArgs", args);
                           }}
                         />
@@ -286,9 +284,7 @@ export default function NewService() {
                           fullWidth
                           helperText="Space-separated arguments to pass to the script"
                           onChange={(e) => {
-                            const args = e.target.value
-                              .split(" ")
-                              .filter(Boolean);
+                            const args = e.target.value;
                             setValue("args", args);
                           }}
                         />
