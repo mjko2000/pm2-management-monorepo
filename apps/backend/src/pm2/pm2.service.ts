@@ -162,6 +162,8 @@ export class PM2Service {
         startConfig.args = service.args || [];
       }
 
+      this.logger.log(`Starting ${service.name}... ${startConfig}`);
+
       const startResult = await start(startConfig);
 
       const pm2Id =
