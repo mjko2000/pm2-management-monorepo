@@ -1,0 +1,377 @@
+import { Injectable } from "@nestjs/common";
+import { InjectModel } from "@nestjs/mongoose";
+import { Model } from "mongoose";
+import * as pm2 from "pm2";
+import { promisify } from "util";
+import { ConfigService } from "../config/config.service";
+import { GitHubService } from "../github/github.service";
+import { PM2Service as IPM2Service, Environment } from "@pm2-dashboard/shared";
+import * as path from "path";
+import { Service } from "../schemas/service.schema";
+import { CustomLogger } from "../logger/logger.service";
+// Create promisified versions of pm2 functions
+const connect = promisify(pm2.connect.bind(pm2));
+const list = promisify(pm2.list.bind(pm2));
+const start = promisify(pm2.start.bind(pm2));
+const stop = promisify(pm2.stop.bind(pm2));
+const restart = promisify(pm2.restart.bind(pm2));
+const disconnect = promisify(pm2.disconnect.bind(pm2));
+const del = promisify(pm2.delete.bind(pm2));
+
+@Injectable()
+export class PM2Service {
+  constructor(
+    private configService: ConfigService,
+    private githubService: GitHubService,
+    @InjectModel(Service.name)
+    private serviceModel: Model<Service>,
+    private logger: CustomLogger
+  ) {
+    this.logger.setContext("PM2Service");
+  }
+
+  async getServices(): Promise<Service[]> {
+    const services = await this.serviceModel.find().exec();
+    await this.updateServicesStatus(services);
+    return services;
+  }
+
+  async getService(id: string): Promise<Service | undefined> {
+    const service = await this.serviceModel.findById(id).exec();
+    if (service) {
+      await this.updateServicesStatus([service]);
+    }
+    return service;
+  }
+
+  async createService(serviceData: Omit<IPM2Service, "_id">): Promise<Service> {
+    const newService = await this.serviceModel.create(serviceData);
+    return newService;
+  }
+
+  async updateService(
+    id: string,
+    serviceData: Partial<IPM2Service>
+  ): Promise<Service | undefined> {
+    const service = await this.serviceModel
+      .findByIdAndUpdate(id, { $set: serviceData }, { new: true })
+      .exec();
+    return service;
+  }
+
+  async deleteService(id: string): Promise<boolean> {
+    const service = await this.serviceModel.findById(id).exec();
+    if (!service) {
+      return false;
+    }
+
+    // Stop and delete service if running
+    if (service.pm2Id !== undefined) {
+      try {
+        await connect();
+        const result = await del(service.pm2Id);
+        console.log(result, "result");
+        await disconnect();
+      } catch (error) {
+        console.error(`Error stopping service ${service.name}:`, error);
+      }
+    }
+
+    await this.serviceModel.findByIdAndDelete(id).exec();
+    return true;
+  }
+
+  async startService(id: string): Promise<Service | undefined> {
+    const service = await this.serviceModel.findById(id).exec();
+    if (!service) {
+      return undefined;
+    }
+
+    if (!service.activeEnvironment) {
+      throw new Error(`No active environment set for service ${service.name}`);
+    }
+
+    // Get active environment
+    const env = service.environments.find(
+      (e) => e.name === service.activeEnvironment
+    );
+    if (!env) {
+      throw new Error(
+        `Environment ${service.activeEnvironment} not found for service ${service.name}`
+      );
+    }
+
+    try {
+      // Clone or pull repo
+      const repoPath = await this.githubService.cloneRepository(
+        service.repositoryUrl,
+        service.branch
+      );
+
+      // Set environment variables for the service
+      const envVars = env.variables;
+
+      // For npm services, run install and build
+      if (service.useNpm) {
+        const cwd = service.sourceDirectory
+          ? path.join(repoPath, service.sourceDirectory)
+          : repoPath;
+
+        // Run npm install
+        const { exec } = require("child_process");
+        const util = require("util");
+        const execPromise = util.promisify(exec);
+
+        try {
+          this.logger.log(`Installing dependencies for ${service.name}...`);
+          await execPromise("npm install", { cwd });
+
+          this.logger.log(`Building ${service.name}...`);
+          await execPromise("npm run build", { cwd });
+        } catch (error) {
+          throw new Error(`Failed to install/build service: ${error.message}`);
+        }
+      }
+
+      // Start PM2 process
+      await connect();
+
+      let startConfig: any = {
+        name: `${service.name}-${service.activeEnvironment}`,
+        env: envVars,
+        cwd: service.sourceDirectory
+          ? path.join(repoPath, service.sourceDirectory)
+          : repoPath,
+      };
+
+      if (service.useNpm) {
+        // Use npm to run the service
+        if (!service.npmScript) {
+          throw new Error(
+            `No npm script specified for service ${service.name}`
+          );
+        }
+        startConfig.script = "npm";
+        startConfig.args = `run ${service.npmScript} ${service.npmArgs.join(" ")}`;
+      } else {
+        // Use direct script execution
+        const scriptPath = service.sourceDirectory
+          ? path.join(repoPath, service.sourceDirectory, service.script)
+          : path.join(repoPath, service.script);
+        startConfig.script = scriptPath;
+        startConfig.args = service.args || [];
+      }
+
+      const startResult = await start(startConfig);
+
+      const pm2Id =
+        Array.isArray(startResult) && startResult.length > 0
+          ? startResult[0].pm2_env?.pm_id
+          : undefined;
+
+      await disconnect();
+
+      // Update service status
+      service.status = "online";
+      service.pm2Id = pm2Id;
+      await service.save();
+
+      return service;
+    } catch (error) {
+      this.logger.error(`Error starting service ${service.name}:`, error);
+      service.status = "errored";
+      await service.save();
+      throw new Error(`Failed to start service: ${error.message}`);
+    }
+  }
+
+  async stopService(id: string): Promise<Service | undefined> {
+    const service = await this.serviceModel.findById(id).exec();
+    if (!service || service.pm2Id === undefined) {
+      return undefined;
+    }
+
+    try {
+      await connect();
+      await stop(service.pm2Id);
+      await disconnect();
+
+      service.status = "stopped";
+      service.pm2Id = undefined;
+      await service.save();
+
+      return service;
+    } catch (error) {
+      throw new Error(`Failed to stop service: ${error.message}`);
+    }
+  }
+
+  async restartService(id: string): Promise<Service | undefined> {
+    const service = await this.serviceModel.findById(id).exec();
+    if (!service || service.pm2Id === undefined) {
+      return undefined;
+    }
+
+    try {
+      await connect();
+      await restart(service.pm2Id);
+      await disconnect();
+
+      service.status = "online";
+      await service.save();
+
+      return service;
+    } catch (error) {
+      throw new Error(`Failed to restart service: ${error.message}`);
+    }
+  }
+
+  async addEnvironment(
+    serviceId: string,
+    environment: Environment
+  ): Promise<Service | undefined> {
+    const service = await this.serviceModel.findById(serviceId).exec();
+    if (!service) {
+      return undefined;
+    }
+
+    // Check if environment with same name already exists
+    if (service.environments.some((e) => e.name === environment.name)) {
+      throw new Error(
+        `Environment ${environment.name} already exists for service ${service.name}`
+      );
+    }
+
+    service.environments.push(environment);
+
+    // If this is the first environment, set it as active
+    if (service.environments.length === 1) {
+      service.activeEnvironment = environment.name;
+    }
+
+    await service.save();
+    return service;
+  }
+
+  async updateEnvironment(
+    serviceId: string,
+    envName: string,
+    environment: Partial<Environment>
+  ): Promise<Service | undefined> {
+    const service = await this.serviceModel.findById(serviceId).exec();
+    if (!service) {
+      return undefined;
+    }
+
+    const envIndex = service.environments.findIndex((e) => e.name === envName);
+    if (envIndex === -1) {
+      throw new Error(
+        `Environment ${envName} not found for service ${service.name}`
+      );
+    }
+
+    service.environments[envIndex] = {
+      ...service.environments[envIndex],
+      ...environment,
+    };
+
+    // If we're changing the environment name and it's the active environment, update that too
+    if (
+      environment.name &&
+      environment.name !== envName &&
+      service.activeEnvironment === envName
+    ) {
+      service.activeEnvironment = environment.name;
+    }
+
+    await service.save();
+    return service;
+  }
+
+  async deleteEnvironment(
+    serviceId: string,
+    envName: string
+  ): Promise<Service | undefined> {
+    const service = await this.serviceModel.findById(serviceId).exec();
+    if (!service) {
+      return undefined;
+    }
+
+    const envIndex = service.environments.findIndex((e) => e.name === envName);
+    if (envIndex === -1) {
+      throw new Error(
+        `Environment ${envName} not found for service ${service.name}`
+      );
+    }
+
+    service.environments.splice(envIndex, 1);
+
+    // If we're removing the active environment, set another one as active if available
+    if (service.activeEnvironment === envName) {
+      service.activeEnvironment =
+        service.environments.length > 0
+          ? service.environments[0].name
+          : undefined;
+    }
+
+    await service.save();
+    return service;
+  }
+
+  async setActiveEnvironment(
+    serviceId: string,
+    envName: string
+  ): Promise<Service | undefined> {
+    const service = await this.serviceModel.findById(serviceId).exec();
+    if (!service) {
+      return undefined;
+    }
+
+    // Check if the environment exists
+    if (!service.environments.some((e) => e.name === envName)) {
+      throw new Error(
+        `Environment ${envName} not found for service ${service.name}`
+      );
+    }
+
+    service.activeEnvironment = envName;
+    await service.save();
+    return service;
+  }
+
+  private async updateServicesStatus(services: Service[]): Promise<void> {
+    try {
+      await connect();
+      const processes = await list();
+      await disconnect();
+
+      // Create a map of PM2 processes for faster lookup
+      const processMap = new Map();
+      processes.forEach((proc) => {
+        const name = proc.name;
+        const id = proc.pm_id;
+        const status = proc.pm2_env?.status;
+        processMap.set(id, { name, status });
+      });
+
+      // Update services with PM2 status
+      for (const service of services) {
+        if (service.pm2Id !== undefined) {
+          const proc = processMap.get(service.pm2Id);
+          if (proc) {
+            service.status = proc.status === "online" ? "online" : "errored";
+          } else {
+            // Process no longer exists in PM2
+            service.status = "stopped";
+            service.pm2Id = undefined;
+          }
+        } else {
+          service.status = "stopped";
+        }
+        await service.save();
+      }
+    } catch (error) {
+      this.logger.error("Error updating services status:", error);
+    }
+  }
+}
