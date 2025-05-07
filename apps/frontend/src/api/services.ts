@@ -41,7 +41,7 @@ export async function updateService(
   service: Partial<PM2Service>
 ): Promise<PM2Service> {
   const response = await fetch(`${API_URL}/services/${id}`, {
-    method: "PATCH",
+    method: "PUT",
     headers: {
       "Content-Type": "application/json",
     },
@@ -125,7 +125,7 @@ export async function updateEnvironment(
   const response = await fetch(
     `${API_URL}/services/${serviceId}/environments/${environmentId}`,
     {
-      method: "PATCH",
+      method: "PUT",
       headers: {
         "Content-Type": "application/json",
       },
