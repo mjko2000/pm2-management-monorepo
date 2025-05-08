@@ -2,7 +2,7 @@
 export interface Environment {
   name: string;
   description?: string;
-  variables: Record<string, string>;
+  variables: Record<string, string> | null;
 }
 
 // GitHub repository interface

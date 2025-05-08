@@ -117,15 +117,17 @@ export class PM2Service {
         ? path.join(repoPath, service.sourceDirectory)
         : repoPath;
 
-      const envContent = Object.entries(envVars)
-        .map(([key, value]) => `${key}=${value}`)
-        .join("\n");
-
       const fs = require("fs");
       const util = require("util");
       const writeFilePromise = util.promisify(fs.writeFile);
 
-      await writeFilePromise(path.join(cwd, ".env"), envContent);
+      if (envVars) {
+        const envContent = Object.entries(envVars)
+          .map(([key, value]) => `${key}=${value}`)
+          .join("\n");
+
+        await writeFilePromise(path.join(cwd, ".env"), envContent);
+      }
 
       // For npm services, run install and build
       if (service.useNpm) {
@@ -137,8 +139,16 @@ export class PM2Service {
           this.logger.log(`Installing dependencies for ${service.name}...`);
           await execPromise("npm install", { cwd });
 
-          this.logger.log(`Building ${service.name}...`);
-          await execPromise("npm run build", { cwd });
+          // Check if package.json has build script
+          const packageJsonPath = path.join(cwd, "package.json");
+          const packageJson = JSON.parse(
+            fs.readFileSync(packageJsonPath, "utf8")
+          );
+
+          if (packageJson.scripts?.build) {
+            this.logger.log(`Building ${service.name}...`);
+            await execPromise("npm run build", { cwd });
+          }
         } catch (error) {
           throw new Error(`Failed to install/build service: ${error.message}`);
         }
