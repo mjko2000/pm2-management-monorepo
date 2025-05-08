@@ -6,14 +6,24 @@ import {
   Grid,
   Paper,
   Chip,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  IconButton,
 } from "@mui/material";
 import { useQuery } from "react-query";
 import { PM2Service } from "@pm2-dashboard/shared";
 import { getServices } from "../api/services";
 import { SystemMetricsComponent } from "../components/SystemMetrics";
 import { ServiceMetricsComponent } from "../components/ServiceMetrics";
+import { useState } from "react";
+import CloseIcon from "@mui/icons-material/Close";
 
 export default function Dashboard() {
+  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(
+    null
+  );
   const {
     data: services,
     isLoading,
@@ -131,7 +141,13 @@ export default function Dashboard() {
                 </Typography>
                 {service.status === "online" && (
                   <Box sx={{ mt: 2 }}>
-                    <ServiceMetricsComponent serviceId={service._id} />
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => setSelectedServiceId(service._id)}
+                    >
+                      View Metrics
+                    </Button>
                   </Box>
                 )}
               </Paper>
@@ -141,6 +157,32 @@ export default function Dashboard() {
       ) : (
         <Typography>No services found</Typography>
       )}
+      <Dialog
+        open={selectedServiceId !== null}
+        onClose={() => setSelectedServiceId(null)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          {services?.find((s) => s._id === selectedServiceId)?.name} Metrics
+          <IconButton
+            aria-label="close"
+            onClick={() => setSelectedServiceId(null)}
+            sx={{
+              position: "absolute",
+              right: 8,
+              top: 8,
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent>
+          {selectedServiceId && (
+            <ServiceMetricsComponent serviceId={selectedServiceId} />
+          )}
+        </DialogContent>
+      </Dialog>
     </Box>
   );
 }
