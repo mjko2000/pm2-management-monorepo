@@ -167,7 +167,6 @@ export class PM2Service {
           ? path.join(repoPath, service.sourceDirectory)
           : repoPath,
       };
-
       if (service.useNpm) {
         // Use npm to run the service
         if (!service.npmScript) {
@@ -178,18 +177,13 @@ export class PM2Service {
         startConfig.script = "npm";
         startConfig.args = `run ${service.npmScript} ${service.npmArgs}`;
       } else {
-        // Use direct script execution
-        const scriptPath = service.sourceDirectory
-          ? path.join(repoPath, service.sourceDirectory, service.script)
-          : path.join(repoPath, service.script);
-        startConfig.script = scriptPath;
+        startConfig.script = service.script;
         startConfig.args = service.args || "";
       }
 
       this.logger.log(
         `Starting ${service.name}... ${startConfig.script} ${startConfig.args} ${startConfig.env ? JSON.stringify(startConfig.env) : ""}`
       );
-
       const startResult = await start(startConfig);
 
       const pm2Id =
