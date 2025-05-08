@@ -10,6 +10,8 @@ import {
 import { useQuery } from "react-query";
 import { PM2Service } from "@pm2-dashboard/shared";
 import { getServices } from "../api/services";
+import { SystemMetricsComponent } from "../components/SystemMetrics";
+import { ServiceMetricsComponent } from "../components/ServiceMetrics";
 
 export default function Dashboard() {
   const {
@@ -84,7 +86,12 @@ export default function Dashboard() {
       </Grid>
 
       <Typography variant="h5" gutterBottom sx={{ mt: 4 }}>
-        Recent Services
+        System Metrics
+      </Typography>
+      <SystemMetricsComponent />
+
+      <Typography variant="h5" gutterBottom sx={{ mt: 4 }}>
+        All Services
       </Typography>
 
       {isLoading ? (
@@ -93,7 +100,7 @@ export default function Dashboard() {
         <Typography color="error">Error loading services</Typography>
       ) : services && services.length > 0 ? (
         <Grid container spacing={2}>
-          {services.slice(0, 4).map((service) => (
+          {services.map((service) => (
             <Grid item key={service._id} xs={12} md={6}>
               <Paper sx={{ p: 2 }}>
                 <Box
@@ -122,6 +129,11 @@ export default function Dashboard() {
                 <Typography variant="body2" color="textSecondary">
                   Environment: {service.activeEnvironment || "None"}
                 </Typography>
+                {service.status === "online" && (
+                  <Box sx={{ mt: 2 }}>
+                    <ServiceMetricsComponent serviceId={service._id} />
+                  </Box>
+                )}
               </Paper>
             </Grid>
           ))}

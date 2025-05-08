@@ -228,4 +228,35 @@ export class PM2Controller {
       );
     }
   }
+
+  @Get("metrics/system")
+  async getSystemMetrics() {
+    try {
+      return await this.pm2Service.getSystemMetrics();
+    } catch (error) {
+      throw new HttpException(
+        error.message || "Failed to get system metrics",
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  @Get(":id/metrics")
+  async getServiceMetrics(@Param("id") id: string) {
+    try {
+      const metrics = await this.pm2Service.getServiceMetrics(id);
+      if (!metrics) {
+        throw new HttpException(
+          "Service not found or not running",
+          HttpStatus.NOT_FOUND
+        );
+      }
+      return metrics;
+    } catch (error) {
+      throw new HttpException(
+        error.message || "Failed to get service metrics",
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
 }

@@ -9,6 +9,7 @@ import { PM2Service as IPM2Service, Environment } from "@pm2-dashboard/shared";
 import * as path from "path";
 import { Service } from "../schemas/service.schema";
 import { CustomLogger } from "../logger/logger.service";
+import * as os from "os";
 // Create promisified versions of pm2 functions
 const connect = promisify(pm2.connect.bind(pm2));
 const list = promisify(pm2.list.bind(pm2));
@@ -111,15 +112,25 @@ export class PM2Service {
       // Set environment variables for the service
       const envVars = env.variables;
 
+      // Write .env file
+      const cwd = service.sourceDirectory
+        ? path.join(repoPath, service.sourceDirectory)
+        : repoPath;
+
+      const envContent = Object.entries(envVars)
+        .map(([key, value]) => `${key}=${value}`)
+        .join("\n");
+
+      const fs = require("fs");
+      const util = require("util");
+      const writeFilePromise = util.promisify(fs.writeFile);
+
+      await writeFilePromise(path.join(cwd, ".env"), envContent);
+
       // For npm services, run install and build
       if (service.useNpm) {
-        const cwd = service.sourceDirectory
-          ? path.join(repoPath, service.sourceDirectory)
-          : repoPath;
-
         // Run npm install
         const { exec } = require("child_process");
-        const util = require("util");
         const execPromise = util.promisify(exec);
 
         try {
@@ -163,7 +174,7 @@ export class PM2Service {
       }
 
       this.logger.log(
-        `Starting ${service.name}... ${startConfig.script} ${startConfig.args}`
+        `Starting ${service.name}... ${startConfig.script} ${startConfig.args} ${startConfig.env ? JSON.stringify(startConfig.env) : ""}`
       );
 
       const startResult = await start(startConfig);
@@ -376,6 +387,68 @@ export class PM2Service {
       }
     } catch (error) {
       this.logger.error("Error updating services status:", error);
+    }
+  }
+
+  async getSystemMetrics() {
+    const totalMemory = os.totalmem();
+    const freeMemory = os.freemem();
+    const usedMemory = totalMemory - freeMemory;
+    const memoryUsage = (usedMemory / totalMemory) * 100;
+
+    const cpus = os.cpus();
+    const cpuUsage = cpus.map((cpu) => {
+      const total = Object.values(cpu.times).reduce((acc, tv) => acc + tv, 0);
+      const idle = cpu.times.idle;
+      return {
+        model: cpu.model,
+        speed: cpu.speed,
+        usage: ((total - idle) / total) * 100,
+      };
+    });
+
+    return {
+      memory: {
+        total: totalMemory,
+        free: freeMemory,
+        used: usedMemory,
+        usagePercentage: memoryUsage,
+      },
+      cpu: {
+        cores: cpus.length,
+        usage: cpuUsage,
+      },
+    };
+  }
+
+  async getServiceMetrics(id: string) {
+    const service = await this.serviceModel.findById(id).exec();
+    if (!service || service.pm2Id === undefined) {
+      return null;
+    }
+
+    try {
+      await connect();
+      const processes = await list();
+      await disconnect();
+
+      const process = processes.find((p) => p.pm_id === service.pm2Id);
+      if (!process) {
+        return null;
+      }
+
+      return {
+        cpu: process.monit?.cpu || 0,
+        memory: process.monit?.memory || 0,
+        uptime: process.pm2_env?.pm_uptime || 0,
+        restarts: process.pm2_env?.restart_time || 0,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error getting metrics for service ${service.name}:`,
+        error
+      );
+      return null;
     }
   }
 }

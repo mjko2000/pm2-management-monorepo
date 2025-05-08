@@ -1,27 +1,7 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "react-query";
-import {
-  Box,
-  Typography,
-  Paper,
-  Grid,
-  Button,
-  Chip,
-  Divider,
-  Card,
-  CardContent,
-  CardHeader,
-  IconButton,
-  Alert,
-  Snackbar,
-} from "@mui/material";
-import PlayArrowIcon from "@mui/icons-material/PlayArrow";
-import StopIcon from "@mui/icons-material/Stop";
-import RefreshIcon from "@mui/icons-material/Refresh";
-import DeleteIcon from "@mui/icons-material/Delete";
-import EditIcon from "@mui/icons-material/Edit";
-import AddIcon from "@mui/icons-material/Add";
+import { Box, Typography, Grid } from "@mui/material";
 import { PM2Service, Environment } from "@pm2-dashboard/shared";
 import {
   getService,
@@ -33,8 +13,15 @@ import {
   updateEnvironment,
   deleteEnvironment,
   setActiveEnvironment,
+  updateService,
 } from "../api/services";
 import EnvironmentDialog from "../components/EnvironmentDialog";
+import EditServiceDialog from "../components/EditServiceDialog";
+import { ServiceMetricsComponent } from "../components/ServiceMetrics";
+import ServiceActions from "../components/ServiceActions";
+import ServiceInformation from "../components/ServiceInformation";
+import ServiceEnvironments from "../components/ServiceEnvironments";
+import Notifications from "../components/Notifications";
 
 export default function ServiceDetails() {
   const { id } = useParams<{ id: string }>();
@@ -44,6 +31,7 @@ export default function ServiceDetails() {
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [envDialogOpen, setEnvDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingEnv, setEditingEnv] = useState<Environment | null>(null);
 
   const { data: service, isLoading } = useQuery<PM2Service>(
@@ -92,6 +80,20 @@ export default function ServiceDetails() {
       setError("Failed to delete service");
     },
   });
+
+  const updateServiceMutation = useMutation(
+    (data: Partial<PM2Service>) => updateService(id!, data),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(["service", id]);
+        setSuccess("Service updated successfully");
+        setEditDialogOpen(false);
+      },
+      onError: () => {
+        setError("Failed to update service");
+      },
+    }
+  );
 
   const handleStart = async () => {
     setProcessing(true);
@@ -171,200 +173,68 @@ export default function ServiceDetails() {
     }
   };
 
+  const handleEditService = async (data: Partial<PM2Service>) => {
+    setProcessing(true);
+    try {
+      await updateServiceMutation.mutateAsync(data);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   if (isLoading) {
     return <Typography>Loading service details...</Typography>;
   }
 
-  if (!service) {
+  if (!service || !id) {
     return <Typography>Service not found</Typography>;
   }
+
+  const serviceId = id as string;
 
   return (
     <Box>
       <Box sx={{ display: "flex", justifyContent: "space-between", mb: 3 }}>
         <Typography variant="h4">{service.name}</Typography>
-        <Box>
-          {service.status !== "online" && (
-            <Button
-              variant="contained"
-              color="success"
-              startIcon={<PlayArrowIcon />}
-              onClick={handleStart}
-              disabled={processing}
-              sx={{ mr: 1 }}
-            >
-              Start
-            </Button>
-          )}
-
-          {service.status === "online" && (
-            <>
-              <Button
-                variant="contained"
-                color="primary"
-                startIcon={<RefreshIcon />}
-                onClick={handleRestart}
-                disabled={processing}
-                sx={{ mr: 1 }}
-              >
-                Restart
-              </Button>
-              <Button
-                variant="contained"
-                color="error"
-                startIcon={<StopIcon />}
-                onClick={handleStop}
-                disabled={processing}
-                sx={{ mr: 1 }}
-              >
-                Stop
-              </Button>
-            </>
-          )}
-
-          <Button
-            variant="outlined"
-            color="error"
-            startIcon={<DeleteIcon />}
-            onClick={handleDelete}
-            disabled={processing}
-          >
-            Delete
-          </Button>
-        </Box>
+        <ServiceActions
+          status={service.status || "unknown"}
+          processing={processing}
+          onStart={handleStart}
+          onStop={handleStop}
+          onRestart={handleRestart}
+          onEdit={() => setEditDialogOpen(true)}
+          onDelete={handleDelete}
+        />
       </Box>
 
-      <Grid container spacing={3}>
+      {service.status === "online" && (
+        <>
+          <Typography variant="h5" gutterBottom sx={{ mt: 4 }}>
+            Service Metrics
+          </Typography>
+          <ServiceMetricsComponent serviceId={serviceId} />
+        </>
+      )}
+
+      <Grid container spacing={2} mt={2}>
         <Grid item xs={12} md={6}>
-          <Card>
-            <CardHeader title="Service Information" />
-            <Divider />
-            <CardContent>
-              <Typography variant="body1" gutterBottom>
-                <strong>Repository:</strong> {service.repositoryUrl}
-              </Typography>
-              <Typography variant="body1" gutterBottom>
-                <strong>Branch:</strong> {service.branch}
-              </Typography>
-              <Typography variant="body1" gutterBottom>
-                <strong>Script:</strong> {service.script}
-              </Typography>
-              {service.sourceDirectory && (
-                <Typography variant="body1" gutterBottom>
-                  <strong>Source Directory:</strong> {service.sourceDirectory}
-                </Typography>
-              )}
-              <Typography variant="body1" gutterBottom>
-                <strong>Status:</strong>{" "}
-                <Chip
-                  label={service.status || "unknown"}
-                  color={
-                    service.status === "online"
-                      ? "success"
-                      : service.status === "stopped"
-                        ? "default"
-                        : "error"
-                  }
-                  size="small"
-                />
-              </Typography>
-            </CardContent>
-          </Card>
+          <ServiceInformation service={service} />
         </Grid>
 
         <Grid item xs={12} md={6}>
-          <Card>
-            <CardHeader
-              title="Environments"
-              action={
-                <Button
-                  startIcon={<AddIcon />}
-                  onClick={() => {
-                    setEditingEnv(null);
-                    setEnvDialogOpen(true);
-                  }}
-                >
-                  Add Environment
-                </Button>
-              }
-            />
-            <Divider />
-            <CardContent>
-              {service.environments.length === 0 ? (
-                <Typography>No environments configured</Typography>
-              ) : (
-                service.environments.map((env) => (
-                  <Paper key={env.name} sx={{ p: 2, mb: 2 }}>
-                    <Box
-                      sx={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        mb: 1,
-                      }}
-                    >
-                      <Typography variant="h6">
-                        {env.name}
-                        {service.activeEnvironment === env.name && (
-                          <Chip
-                            label="Active"
-                            color="primary"
-                            size="small"
-                            sx={{ ml: 1 }}
-                          />
-                        )}
-                      </Typography>
-                      <Box>
-                        {service.activeEnvironment !== env.name && (
-                          <Button
-                            size="small"
-                            onClick={() => handleSetActiveEnvironment(env.name)}
-                            sx={{ mr: 1 }}
-                          >
-                            Set Active
-                          </Button>
-                        )}
-                        <IconButton
-                          size="small"
-                          onClick={() => {
-                            setEditingEnv(env);
-                            setEnvDialogOpen(true);
-                          }}
-                        >
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          color="error"
-                          onClick={() => handleDeleteEnvironment(env.name)}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </Box>
-                    </Box>
-                    {env.description && (
-                      <Typography
-                        variant="body2"
-                        color="textSecondary"
-                        gutterBottom
-                      >
-                        {env.description}
-                      </Typography>
-                    )}
-                    <Typography variant="subtitle2" gutterBottom>
-                      Environment Variables:
-                    </Typography>
-                    {env.variables &&
-                      Object.entries(env.variables).map(([key, value]) => (
-                        <Typography key={key} variant="body2">
-                          {key}: {value}
-                        </Typography>
-                      ))}
-                  </Paper>
-                ))
-              )}
-            </CardContent>
-          </Card>
+          <ServiceEnvironments
+            service={service}
+            onAddEnvironment={() => {
+              setEditingEnv(null);
+              setEnvDialogOpen(true);
+            }}
+            onEditEnvironment={(env) => {
+              setEditingEnv(env);
+              setEnvDialogOpen(true);
+            }}
+            onDeleteEnvironment={handleDeleteEnvironment}
+            onSetActiveEnvironment={handleSetActiveEnvironment}
+          />
         </Grid>
       </Grid>
 
@@ -378,25 +248,19 @@ export default function ServiceDetails() {
         editingEnv={editingEnv}
       />
 
-      <Snackbar
-        open={!!success}
-        autoHideDuration={6000}
-        onClose={() => setSuccess(null)}
-      >
-        <Alert severity="success" onClose={() => setSuccess(null)}>
-          {success}
-        </Alert>
-      </Snackbar>
+      <EditServiceDialog
+        open={editDialogOpen}
+        onClose={() => setEditDialogOpen(false)}
+        onSubmit={handleEditService}
+        service={service}
+      />
 
-      <Snackbar
-        open={!!error}
-        autoHideDuration={6000}
-        onClose={() => setError(null)}
-      >
-        <Alert severity="error" onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      </Snackbar>
+      <Notifications
+        success={success}
+        error={error}
+        onCloseSuccess={() => setSuccess(null)}
+        onCloseError={() => setError(null)}
+      />
     </Box>
   );
 }
