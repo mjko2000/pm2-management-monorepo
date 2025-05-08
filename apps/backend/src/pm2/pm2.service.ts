@@ -5,7 +5,11 @@ import * as pm2 from "pm2";
 import { promisify } from "util";
 import { ConfigService } from "../config/config.service";
 import { GitHubService } from "../github/github.service";
-import { PM2Service as IPM2Service, Environment } from "@pm2-dashboard/shared";
+import {
+  PM2Service as IPM2Service,
+  Environment,
+  SystemMetrics,
+} from "@pm2-dashboard/shared";
 import * as path from "path";
 import { Service } from "../schemas/service.schema";
 import { CustomLogger } from "../logger/logger.service";
@@ -71,10 +75,9 @@ export class PM2Service {
       try {
         await connect();
         const result = await del(service.pm2Id);
-        console.log(result, "result");
         await disconnect();
       } catch (error) {
-        console.error(`Error stopping service ${service.name}:`, error);
+        this.logger.error(`Error stopping service ${service.name}:`, error);
       }
     }
 
@@ -400,7 +403,7 @@ export class PM2Service {
     }
   }
 
-  async getSystemMetrics() {
+  async getSystemMetrics(): Promise<SystemMetrics> {
     const totalMemory = os.totalmem();
     const freeMemory = os.freemem();
     const usedMemory = totalMemory - freeMemory;
@@ -459,6 +462,30 @@ export class PM2Service {
         error
       );
       return null;
+    }
+  }
+
+  async getServiceLogs(id: string, lines: number = 100): Promise<string> {
+    const service = await this.serviceModel.findById(id).exec();
+    if (!service || service.pm2Id === undefined) {
+      throw new Error("Service not found or not running");
+    }
+
+    try {
+      const util = require("util");
+      const { exec } = require("child_process");
+      const execPromise = util.promisify(exec);
+
+      const { stdout } = await execPromise(
+        `pm2 logs ${service.pm2Id} --lines ${lines} --raw --nostream`
+      );
+      return stdout;
+    } catch (error) {
+      this.logger.error(
+        `Error getting logs for service ${service.name}:`,
+        error
+      );
+      throw new Error(`Failed to get service logs: ${error.message}`);
     }
   }
 }

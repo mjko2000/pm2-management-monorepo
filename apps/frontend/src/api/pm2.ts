@@ -1,21 +1,5 @@
+import { SystemMetrics } from "@pm2-dashboard/shared";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
-
-export interface SystemMetrics {
-  memory: {
-    total: number;
-    free: number;
-    used: number;
-    usagePercentage: number;
-  };
-  cpu: {
-    cores: number;
-    usage: Array<{
-      model: string;
-      speed: number;
-      usage: number;
-    }>;
-  };
-}
 
 export interface ServiceMetrics {
   cpu: number;

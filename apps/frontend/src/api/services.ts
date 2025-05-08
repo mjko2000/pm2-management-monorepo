@@ -1,7 +1,8 @@
 import { PM2Service, Environment } from "@pm2-dashboard/shared";
+import { ServiceMetrics } from "./pm2";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
-console.log(import.meta.env);
+
 export async function getServices(): Promise<PM2Service[]> {
   const response = await fetch(`${API_URL}/services`);
   if (!response.ok) {
@@ -171,3 +172,26 @@ export async function setActiveEnvironment(
     throw new Error("Failed to set active environment");
   }
 }
+
+export const getServiceMetrics = async (
+  serviceId: string
+): Promise<ServiceMetrics> => {
+  const response = await fetch(`${API_URL}/services/${serviceId}/metrics`);
+  if (!response.ok) {
+    throw new Error("Failed to fetch service metrics");
+  }
+  return response.json();
+};
+
+export const getServiceLogs = async (
+  serviceId: string,
+  lines: number = 100
+): Promise<{ logs: string }> => {
+  const response = await fetch(
+    `${API_URL}/services/${serviceId}/logs?lines=${lines}`
+  );
+  if (!response.ok) {
+    throw new Error("Failed to fetch service logs");
+  }
+  return response.json();
+};

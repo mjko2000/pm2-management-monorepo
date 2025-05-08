@@ -7,7 +7,8 @@ import {
   LinearProgress,
   Box,
 } from "@mui/material";
-import { getSystemMetrics, type SystemMetrics } from "../api/pm2";
+import { getSystemMetrics } from "../api/pm2";
+import { SystemMetrics } from "@pm2-dashboard/shared";
 
 const formatBytes = (bytes: number): string => {
   const units = ["B", "KB", "MB", "GB"];

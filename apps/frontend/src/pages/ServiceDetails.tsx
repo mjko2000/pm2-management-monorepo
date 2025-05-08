@@ -18,6 +18,7 @@ import {
 import EnvironmentDialog from "../components/EnvironmentDialog";
 import EditServiceDialog from "../components/EditServiceDialog";
 import { ServiceMetricsComponent } from "../components/ServiceMetrics";
+import { ServiceLogs } from "../components/ServiceLogs";
 import ServiceActions from "../components/ServiceActions";
 import ServiceInformation from "../components/ServiceInformation";
 import ServiceEnvironments from "../components/ServiceEnvironments";
@@ -216,7 +217,7 @@ export default function ServiceDetails() {
         </>
       )}
 
-      <Grid container spacing={2} mt={2}>
+      <Grid container spacing={2} my={2}>
         <Grid item xs={12} md={6}>
           <ServiceInformation service={service} />
         </Grid>
@@ -237,6 +238,7 @@ export default function ServiceDetails() {
           />
         </Grid>
       </Grid>
+      <ServiceLogs serviceId={serviceId} />
 
       <EnvironmentDialog
         open={envDialogOpen}

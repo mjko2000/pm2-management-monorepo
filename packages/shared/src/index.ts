@@ -52,3 +52,19 @@ export interface Log {
   trace?: string;
   timestamp: Date;
 }
+export interface SystemMetrics {
+  memory: {
+    total: number;
+    free: number;
+    used: number;
+    usagePercentage: number;
+  };
+  cpu: {
+    cores: number;
+    usage: Array<{
+      model: string;
+      speed: number;
+      usage: number;
+    }>;
+  };
+}

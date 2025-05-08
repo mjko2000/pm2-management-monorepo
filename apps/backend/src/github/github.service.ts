@@ -64,7 +64,6 @@ export class GitHubService {
   }
 
   async getRepositories(): Promise<Repository[]> {
-    console.log("get repositories", this.octokit);
     if (!this.octokit) {
       throw new UnauthorizedException("GitHub token not configured");
     }

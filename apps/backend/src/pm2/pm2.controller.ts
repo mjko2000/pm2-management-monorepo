@@ -8,6 +8,7 @@ import {
   Param,
   HttpException,
   HttpStatus,
+  Query,
 } from "@nestjs/common";
 import { PM2Service } from "./pm2.service";
 import { PM2Service as IPM2Service, Environment } from "@pm2-dashboard/shared";
@@ -255,6 +256,22 @@ export class PM2Controller {
     } catch (error) {
       throw new HttpException(
         error.message || "Failed to get service metrics",
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  @Get(":id/logs")
+  async getServiceLogs(
+    @Param("id") id: string,
+    @Query("lines") lines: string = "100"
+  ) {
+    try {
+      const logs = await this.pm2Service.getServiceLogs(id, parseInt(lines));
+      return { logs };
+    } catch (error) {
+      throw new HttpException(
+        error.message || "Failed to get service logs",
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
