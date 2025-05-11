@@ -132,16 +132,16 @@ export class PM2Service {
         await writeFilePromise(path.join(cwd, ".env"), envContent);
       }
 
-      // For npm services, run install and build
+      const { exec } = require("child_process");
+      const execPromise = util.promisify(exec);
+
+      // Run npm install
+      this.logger.log(`Installing dependencies for ${service.name}...`);
+      await execPromise("npm install", { cwd });
+
+      // For npm commands, run install and build
       if (service.useNpm) {
-        // Run npm install
-        const { exec } = require("child_process");
-        const execPromise = util.promisify(exec);
-
         try {
-          this.logger.log(`Installing dependencies for ${service.name}...`);
-          await execPromise("npm install", { cwd });
-
           // Check if package.json has build script
           const packageJsonPath = path.join(cwd, "package.json");
           const packageJson = JSON.parse(
