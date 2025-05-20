@@ -141,7 +141,7 @@ export class PM2Service {
       // Run npm install
       this.logger.log(`Installing dependencies for ${service.name}...`);
 
-      let npmPath = "";
+      let npmPath = "npm";
 
       if (service.nodeVersion) {
         npmPath = `${this.nvmDir}/${service.nodeVersion}/bin/npm`;
