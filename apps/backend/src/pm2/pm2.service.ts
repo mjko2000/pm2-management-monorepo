@@ -141,20 +141,20 @@ export class PM2Service {
       // Run npm install
       this.logger.log(`Installing dependencies for ${service.name}...`);
 
+      let customNodeVersionScript = "";
+
       if (service.nodeVersion) {
         // npmPath = `${this.nvmDir}/${service.nodeVersion}/bin/npm`;
-        const { stdout } = await execPromise(
+        customNodeVersionScript =
           'export NVM_DIR="$HOME/.nvm" && ' +
-            '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && ' +
-            `nvm use ${service.nodeVersion.replace("v", "")}`,
-          { cwd }
-        );
+          '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && ' +
+          `nvm use ${service.nodeVersion.replace("v", "")} &&`;
         this.logger.log(
           `Using Node.js version ${service.nodeVersion} for ${service.name}...`
         );
       }
 
-      await execPromise(`npm install`, { cwd });
+      await execPromise(`${customNodeVersionScript} npm install`, { cwd });
 
       // For npm commands, run install and build
       if (service.useNpm) {
@@ -167,7 +167,9 @@ export class PM2Service {
 
           if (packageJson.scripts?.build) {
             this.logger.log(`Building ${service.name}...`);
-            await execPromise(`npm run build`, { cwd });
+            await execPromise(`${customNodeVersionScript} npm run build`, {
+              cwd,
+            });
           }
         } catch (error) {
           throw new Error(`Failed to install/build service: ${error.message}`);
@@ -191,10 +193,10 @@ export class PM2Service {
             `No npm script specified for service ${service.name}`
           );
         }
-        startConfig.script = "npm";
+        startConfig.script = `${customNodeVersionScript} npm`;
         startConfig.args = `run ${service.npmScript} ${service.npmArgs}`;
       } else {
-        startConfig.script = service.script;
+        startConfig.script = `${customNodeVersionScript} ${service.script}`;
         startConfig.args = service.args || "";
       }
 
