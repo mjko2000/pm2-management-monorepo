@@ -48,7 +48,10 @@ export class ConfigService {
     let config = await this.systemConfigModel.findOne().exec();
     if (!config) {
       config = await this.systemConfigModel.create({
-        workingDirectory: path.join(process.cwd(), "repositories"),
+        workingDirectory: path.join(
+          process.env.HOME || process.env.USERPROFILE || "",
+          "repositories"
+        ),
       });
     }
     return config;

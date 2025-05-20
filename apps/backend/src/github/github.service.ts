@@ -38,7 +38,6 @@ export class GitHubService {
       new this.systemConfigModel();
     config.github = { token };
     await config.save();
-    console.log("set token", token);
 
     this.octokit = new Octokit({
       auth: token,
