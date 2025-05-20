@@ -64,6 +64,11 @@ export class PM2Controller {
     return this.pm2Service.getServices();
   }
 
+  @Get("node/versions")
+  async getAvailableNodeVersions(): Promise<string[]> {
+    return this.pm2Service.getAvailableNodeVersions();
+  }
+
   @Get(":id")
   async getService(@Param("id") id: string): Promise<Service> {
     const service = await this.pm2Service.getService(id);

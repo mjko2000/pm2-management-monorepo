@@ -16,6 +16,9 @@ export class Service extends Document {
   @Prop()
   sourceDirectory?: string;
 
+  @Prop()
+  nodeVersion?: string;
+
   @Prop({ required: true, default: false })
   useNpm: boolean;
 

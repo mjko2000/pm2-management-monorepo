@@ -20,6 +20,7 @@ import { useForm, Controller } from "react-hook-form";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createService } from "../api/services";
 import { getRepositories, getBranches } from "../api/github";
+import { getNodeVersions } from "../api/services";
 import { Repository, PM2Service } from "@pm2-dashboard/shared";
 
 interface NewServiceForm {
@@ -32,6 +33,7 @@ interface NewServiceForm {
   npmArgs?: string;
   script: string;
   args?: string;
+  nodeVersion: string;
 }
 
 export default function NewService() {
@@ -47,6 +49,7 @@ export default function NewService() {
       npmArgs: "",
       script: "",
       args: "",
+      nodeVersion: "",
     },
   });
 
@@ -66,6 +69,12 @@ export default function NewService() {
     enabled: !!selectedRepo,
   });
 
+  // Fetch Node.js versions
+  const { data: nodeVersions, isLoading: isLoadingNodeVersions } = useQuery({
+    queryKey: ["nodeVersions"],
+    queryFn: getNodeVersions,
+  });
+
   // Create service mutation
   const createServiceMutation = useMutation({
     mutationFn: (data: NewServiceForm) => {
@@ -79,6 +88,7 @@ export default function NewService() {
         npmArgs: data.npmArgs,
         script: data.script,
         args: data.args,
+        nodeVersion: data.nodeVersion,
         environments: [],
         status: "stopped",
       };
@@ -186,6 +196,34 @@ export default function NewService() {
                       fullWidth
                       helperText="Relative path to the source directory within the repository"
                     />
+                  )}
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Controller
+                  name="nodeVersion"
+                  control={control}
+                  rules={{ required: "Node.js version is required" }}
+                  render={({ field, fieldState: { error } }) => (
+                    <FormControl fullWidth error={!!error}>
+                      <InputLabel>Node.js Version</InputLabel>
+                      <Select
+                        {...field}
+                        label="Node.js Version"
+                        endAdornment={
+                          isLoadingNodeVersions ? (
+                            <CircularProgress size={20} />
+                          ) : null
+                        }
+                      >
+                        {nodeVersions?.map((version: string) => (
+                          <MenuItem key={version} value={version}>
+                            {version}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
                   )}
                 />
               </Grid>

@@ -195,3 +195,11 @@ export const getServiceLogs = async (
   }
   return response.json();
 };
+
+export const getNodeVersions = async (): Promise<string[]> => {
+  const response = await fetch(`${API_URL}/services/node/versions`);
+  if (!response.ok) {
+    throw new Error("Failed to fetch Node.js versions");
+  }
+  return response.json();
+};

@@ -19,6 +19,7 @@ import {
 import { PM2Service, Repository } from "@pm2-dashboard/shared";
 import { useQuery } from "react-query";
 import { getRepositories, getBranches } from "../api/github";
+import { getNodeVersions } from "../api/services";
 
 interface EditServiceDialogProps {
   open: boolean;
@@ -43,6 +44,7 @@ export default function EditServiceDialog({
     useNpm: false,
     npmScript: "",
     npmArgs: "",
+    nodeVersion: "",
   });
 
   // Fetch repositories
@@ -58,6 +60,12 @@ export default function EditServiceDialog({
     enabled: !!formData.repositoryUrl,
   });
 
+  // Fetch Node.js versions
+  const { data: nodeVersions, isLoading: isLoadingNodeVersions } = useQuery({
+    queryKey: ["nodeVersions"],
+    queryFn: getNodeVersions,
+  });
+
   useEffect(() => {
     if (service) {
       setFormData({
@@ -70,15 +78,24 @@ export default function EditServiceDialog({
         useNpm: service.useNpm || false,
         npmScript: service.npmScript || "",
         npmArgs: service.npmArgs || "",
+        nodeVersion: service.nodeVersion || "",
       });
     }
   }, [service]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, checked } = e.target;
     setFormData((prev) => ({
       ...prev,
       [name]: name === "useNpm" ? checked : value,
+    }));
+  };
+
+  const handleSelectChange = (e: SelectChangeEvent) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
     }));
   };
 
@@ -114,7 +131,7 @@ export default function EditServiceDialog({
               name="name"
               label="Service Name"
               value={formData.name}
-              onChange={handleChange}
+              onChange={handleInputChange}
               required
               fullWidth
             />
@@ -158,16 +175,34 @@ export default function EditServiceDialog({
               name="sourceDirectory"
               label="Source Directory (optional)"
               value={formData.sourceDirectory}
-              onChange={handleChange}
+              onChange={handleInputChange}
               fullWidth
               helperText="Leave empty if the service is in the root directory"
             />
+            <FormControl fullWidth>
+              <InputLabel>Node.js Version</InputLabel>
+              <Select
+                name="nodeVersion"
+                value={formData.nodeVersion || ""}
+                label="Node.js Version"
+                onChange={handleSelectChange}
+                endAdornment={
+                  isLoadingNodeVersions ? <CircularProgress size={20} /> : null
+                }
+              >
+                {nodeVersions?.map((version: string) => (
+                  <MenuItem key={version} value={version}>
+                    {version}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
             <FormControlLabel
               control={
                 <Switch
                   name="useNpm"
                   checked={formData.useNpm}
-                  onChange={handleChange}
+                  onChange={handleInputChange}
                 />
               }
               label="Use NPM"
@@ -178,14 +213,14 @@ export default function EditServiceDialog({
                   name="npmScript"
                   label="NPM Script"
                   value={formData.npmScript}
-                  onChange={handleChange}
+                  onChange={handleInputChange}
                   fullWidth
                 />
                 <TextField
                   name="npmArgs"
                   label="NPM Arguments"
                   value={formData.npmArgs}
-                  onChange={handleChange}
+                  onChange={handleInputChange}
                   fullWidth
                 />
               </>
@@ -194,14 +229,14 @@ export default function EditServiceDialog({
               name="script"
               label="Script"
               value={formData.script}
-              onChange={handleChange}
+              onChange={handleInputChange}
               fullWidth
             />
             <TextField
               name="args"
               label="Arguments"
               value={formData.args}
-              onChange={handleChange}
+              onChange={handleInputChange}
               fullWidth
             />
           </Box>

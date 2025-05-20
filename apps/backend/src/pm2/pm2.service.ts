@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import * as pm2 from "pm2";
@@ -25,6 +25,7 @@ const del = promisify(pm2.delete.bind(pm2));
 
 @Injectable()
 export class PM2Service {
+  private nvmDir: string;
   constructor(
     private configService: ConfigService,
     private githubService: GitHubService,
@@ -33,6 +34,7 @@ export class PM2Service {
     private logger: CustomLogger
   ) {
     this.logger.setContext("PM2Service");
+    this.nvmDir = path.join(process.env.HOME, ".nvm", "versions", "node");
   }
 
   async getServices(): Promise<Service[]> {
@@ -86,9 +88,10 @@ export class PM2Service {
   }
 
   async startService(id: string): Promise<Service | undefined> {
+    this.logger.log(`Starting service ${id}`);
     const service = await this.serviceModel.findById(id).exec();
     if (!service) {
-      return undefined;
+      throw new NotFoundException(`Service ${id} not found`);
     }
 
     if (!service.activeEnvironment) {
@@ -137,7 +140,16 @@ export class PM2Service {
 
       // Run npm install
       this.logger.log(`Installing dependencies for ${service.name}...`);
-      await execPromise("npm install", { cwd });
+      let npmPath = "npm";
+
+      if (service.nodeVersion) {
+        npmPath = `${this.nvmDir}/${service.nodeVersion}/bin/npm`;
+        this.logger.log(
+          `Using Node.js version ${service.nodeVersion} for ${service.name}...`
+        );
+      }
+
+      await execPromise(`${npmPath} install`, { cwd });
 
       // For npm commands, run install and build
       if (service.useNpm) {
@@ -150,7 +162,7 @@ export class PM2Service {
 
           if (packageJson.scripts?.build) {
             this.logger.log(`Building ${service.name}...`);
-            await execPromise("npm run build", { cwd });
+            await execPromise(`${npmPath} run build`, { cwd });
           }
         } catch (error) {
           throw new Error(`Failed to install/build service: ${error.message}`);
@@ -166,6 +178,7 @@ export class PM2Service {
         cwd: service.sourceDirectory
           ? path.join(repoPath, service.sourceDirectory)
           : repoPath,
+        interpreter: service.nodeVersion ? npmPath : undefined,
       };
       if (service.useNpm) {
         // Use npm to run the service
@@ -182,7 +195,7 @@ export class PM2Service {
       }
 
       this.logger.log(
-        `Starting ${service.name}... ${startConfig.script} ${startConfig.args} ${startConfig.env ? JSON.stringify(startConfig.env) : ""}`
+        `All build steps completed for ${service.name}, starting... ${startConfig.script} ${startConfig.args} ${startConfig.env ? JSON.stringify(startConfig.env) : ""}`
       );
       const startResult = await start(startConfig);
 
@@ -190,6 +203,8 @@ export class PM2Service {
         Array.isArray(startResult) && startResult.length > 0
           ? startResult[0].pm2_env?.pm_id
           : undefined;
+
+      this.logger.log(`Service ${service.name} started with PM2 ID: ${pm2Id}`);
 
       await disconnect();
 
@@ -480,6 +495,31 @@ export class PM2Service {
         error
       );
       throw new Error(`Failed to get service logs: ${error.message}`);
+    }
+  }
+
+  async getAvailableNodeVersions(): Promise<string[]> {
+    try {
+      const fs = require("fs");
+      const path = require("path");
+      const nvmDir = this.nvmDir;
+
+      if (!fs.existsSync(nvmDir)) {
+        return [];
+      }
+
+      const versions = fs
+        .readdirSync(nvmDir)
+        .filter((dir) => dir.startsWith("v"))
+        .sort((a, b) => {
+          // Sort versions in descending order
+          return b.localeCompare(a, undefined, { numeric: true });
+        });
+
+      return versions;
+    } catch (error) {
+      this.logger.error("Error getting Node versions:", error);
+      throw new Error(`Failed to get Node versions: ${error.message}`);
     }
   }
 }

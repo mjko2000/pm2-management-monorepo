@@ -30,6 +30,7 @@ export interface PM2Service {
   npmArgs?: string;
   npmScript?: string;
   useNpm?: boolean;
+  nodeVersion?: string;
 }
 
 // GitHub Token Config
