@@ -149,6 +149,15 @@ export class PM2Service {
         );
       }
 
+      // Remove node_modules directory if it exists
+      const nodeModulesPath = path.join(cwd, "node_modules");
+      if (fs.existsSync(nodeModulesPath)) {
+        this.logger.log(
+          `Removing existing node_modules for ${service.name}...`
+        );
+        fs.rmSync(nodeModulesPath, { recursive: true, force: true });
+      }
+
       await execPromise(`${npmPath} install`, { cwd });
 
       // For npm commands, run install and build
