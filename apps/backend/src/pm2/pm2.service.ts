@@ -153,14 +153,14 @@ export class PM2Service {
           'export NVM_DIR="$HOME/.nvm" && ' +
           '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && ' +
           `nvm use ${service.nodeVersion.replace("v", "")} &&`;
+
+        await execPromise(`${customNodeVersionScript} install -g yarn`, {
+          cwd,
+        });
         this.logger.log(
           `Using Node.js version ${service.nodeVersion} for ${service.name}...`
         );
       }
-
-      await execPromise(`${npmPath} install -g yarn`, {
-        cwd,
-      });
 
       await execPromise(`${yarnPath} install`, { cwd });
 
