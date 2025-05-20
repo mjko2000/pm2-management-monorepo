@@ -143,8 +143,12 @@ export class PM2Service {
 
       let customNodeVersionScript = "";
 
+      let npmPath = "";
+      let yarnPath = "";
+
       if (service.nodeVersion) {
-        // npmPath = `${this.nvmDir}/${service.nodeVersion}/bin/npm`;
+        npmPath = `${this.nvmDir}/${service.nodeVersion}/bin/npm`;
+        yarnPath = `${this.nvmDir}/${service.nodeVersion}/bin/yarn`;
         customNodeVersionScript =
           'export NVM_DIR="$HOME/.nvm" && ' +
           '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && ' +
@@ -154,7 +158,11 @@ export class PM2Service {
         );
       }
 
-      await execPromise(`${customNodeVersionScript} npm install`, { cwd });
+      await execPromise(`${npmPath} install -g yarn`, {
+        cwd,
+      });
+
+      await execPromise(`${yarnPath} install`, { cwd });
 
       // For npm commands, run install and build
       if (service.useNpm) {
@@ -167,7 +175,7 @@ export class PM2Service {
 
           if (packageJson.scripts?.build) {
             this.logger.log(`Building ${service.name}...`);
-            await execPromise(`${customNodeVersionScript} npm run build`, {
+            await execPromise(`${yarnPath} build`, {
               cwd,
             });
           }
@@ -193,10 +201,10 @@ export class PM2Service {
             `No npm script specified for service ${service.name}`
           );
         }
-        startConfig.script = `${customNodeVersionScript} npm`;
-        startConfig.args = `run ${service.npmScript} ${service.npmArgs}`;
+        startConfig.script = yarnPath;
+        startConfig.args = `${service.npmScript} ${service.npmArgs}`;
       } else {
-        startConfig.script = `${customNodeVersionScript} ${service.script}`;
+        startConfig.script = `${service.script}`;
         startConfig.args = service.args || "";
       }
 
