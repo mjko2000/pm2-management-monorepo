@@ -140,25 +140,21 @@ export class PM2Service {
 
       // Run npm install
       this.logger.log(`Installing dependencies for ${service.name}...`);
-      let npmPath = "npm";
 
       if (service.nodeVersion) {
-        npmPath = `${this.nvmDir}/${service.nodeVersion}/bin/npm`;
+        // npmPath = `${this.nvmDir}/${service.nodeVersion}/bin/npm`;
+        const { stdout } = await execPromise(
+          'export NVM_DIR="$HOME/.nvm" && ' +
+            '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && ' +
+            `nvm use ${service.nodeVersion.replace("v", "")}`,
+          { cwd }
+        );
         this.logger.log(
           `Using Node.js version ${service.nodeVersion} for ${service.name}...`
         );
       }
 
-      // Remove node_modules directory if it exists
-      const nodeModulesPath = path.join(cwd, "node_modules");
-      if (fs.existsSync(nodeModulesPath)) {
-        this.logger.log(
-          `Removing existing node_modules for ${service.name}...`
-        );
-        fs.rmSync(nodeModulesPath, { recursive: true, force: true });
-      }
-
-      await execPromise(`${npmPath} install`, { cwd });
+      await execPromise(`npm install`, { cwd });
 
       // For npm commands, run install and build
       if (service.useNpm) {
@@ -171,7 +167,7 @@ export class PM2Service {
 
           if (packageJson.scripts?.build) {
             this.logger.log(`Building ${service.name}...`);
-            await execPromise(`${npmPath} run build`, { cwd });
+            await execPromise(`npm run build`, { cwd });
           }
         } catch (error) {
           throw new Error(`Failed to install/build service: ${error.message}`);
@@ -187,7 +183,6 @@ export class PM2Service {
         cwd: service.sourceDirectory
           ? path.join(repoPath, service.sourceDirectory)
           : repoPath,
-        interpreter: service.nodeVersion ? npmPath : undefined,
       };
       if (service.useNpm) {
         // Use npm to run the service
