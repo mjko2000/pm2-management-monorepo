@@ -126,13 +126,25 @@ export class PM2Service {
       const fs = require("fs");
       const util = require("util");
       const writeFilePromise = util.promisify(fs.writeFile);
+      const mkdirPromise = util.promisify(fs.mkdir);
 
       if (envVars) {
         const envContent = Object.entries(envVars)
           .map(([key, value]) => `${key}=${value}`)
           .join("\n");
 
-        await writeFilePromise(path.join(cwd, ".env"), envContent);
+        // Ensure directory exists before writing .env file
+        try {
+          await mkdirPromise(cwd, { recursive: true });
+          await writeFilePromise(path.join(cwd, ".env"), envContent);
+        } catch (error) {
+          this.logger.error(
+            `Error creating directory or writing .env file: ${error.message}`
+          );
+          throw new Error(
+            `Failed to create directory or write .env file: ${error.message}`
+          );
+        }
       }
 
       const { exec } = require("child_process");
