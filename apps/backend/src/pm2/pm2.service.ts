@@ -793,7 +793,7 @@ export class PM2Service {
       const execPromise = util.promisify(exec);
 
       const { stdout } = await execPromise(
-        `pm2 logs ${service.pm2AppName} --lines ${lines} --raw --nostream`
+        `pm2 logs "${service.pm2AppName}" --lines ${lines} --raw --nostream`
       );
       return stdout;
     } catch (error) {
