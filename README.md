@@ -1,6 +1,9 @@
 # PM2 Dashboard
 
 A modern web-based dashboard for managing PM2 processes with GitHub integration, built with React, Node.js, and MongoDB.
+![Screenshot 2025-05-31 at 16 23 24](https://github.com/user-attachments/assets/bca66e51-c4f4-40a1-bb70-c4b54047f428)
+![Screenshot 2025-05-31 at 16 23 59](https://github.com/user-attachments/assets/2d3b5f81-2e8b-41f3-8b65-1e574e58250f)
+![Screenshot 2025-05-31 at 16 24 51](https://github.com/user-attachments/assets/f01f4b49-8a02-4589-9030-a1aca41ab667)
 
 ## 🚀 Features
 
