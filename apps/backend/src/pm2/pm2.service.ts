@@ -424,15 +424,15 @@ export class PM2Service {
     // Run npm install
     this.logger.log(`Installing dependencies for ${service.name}...`);
 
-    let npmPath = "npm";
+    let yarnPath = "yarn";
     if (service.nodeVersion) {
-      npmPath = `${this.nvmDir}/${service.nodeVersion}/bin/npm`;
+      yarnPath = `${this.nvmDir}/${service.nodeVersion}/bin/yarn`;
       this.logger.log(
         `Using Node.js version ${service.nodeVersion} for ${service.name}...`
       );
     }
 
-    await execPromise(`${npmPath} install`, { cwd });
+    await execPromise(`${yarnPath} install`, { cwd });
 
     // For npm commands, run build if available
     if (service.useNpm) {
@@ -445,7 +445,7 @@ export class PM2Service {
 
         if (packageJson.scripts?.build) {
           this.logger.log(`Building ${service.name}...`);
-          await execPromise(`${npmPath} run build`, { cwd });
+          await execPromise(`${yarnPath} run build`, { cwd });
         }
       } catch (error) {
         throw new Error(`Failed to install/build service: ${error.message}`);
