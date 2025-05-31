@@ -10,12 +10,19 @@ import * as fs from "fs";
 @Injectable()
 export class ConfigService {
   private config: SystemConfig;
+  private defaultWorkingDirectory: string;
 
   constructor(
     private configService: NestConfigService,
     @InjectModel(SystemConfigModel.name)
     private systemConfigModel: Model<SystemConfigModel>
   ) {
+    this.defaultWorkingDirectory =
+      this.configService.get("WORKING_DIR") ||
+      path.join(
+        process.env.HOME || process.env.USERPROFILE || "",
+        "repositories"
+      );
     this.loadConfig();
   }
 
@@ -26,10 +33,10 @@ export class ConfigService {
       if (!config) {
         // Default config if not exists
         config = await this.systemConfigModel.create({
-          workingDirectory: path.join(
-            process.env.HOME || process.env.USERPROFILE || "",
-            "repositories"
-          ),
+          workingDirectory: this.defaultWorkingDirectory,
+          github: {
+            token: this.configService.get("GITHUB_TOKEN"),
+          },
         });
       }
 
@@ -37,10 +44,7 @@ export class ConfigService {
     } catch (error) {
       console.error("Error loading config:", error);
       this.config = {
-        workingDirectory: path.join(
-          process.env.HOME || process.env.USERPROFILE || "",
-          "repositories"
-        ),
+        workingDirectory: this.defaultWorkingDirectory,
       };
     }
 
@@ -54,10 +58,10 @@ export class ConfigService {
     let config = await this.systemConfigModel.findOne().exec();
     if (!config) {
       config = await this.systemConfigModel.create({
-        workingDirectory: path.join(
-          process.env.HOME || process.env.USERPROFILE || "",
-          "repositories"
-        ),
+        workingDirectory: this.defaultWorkingDirectory,
+        github: {
+          token: this.configService.get("GITHUB_TOKEN"),
+        },
       });
     }
     return config;
