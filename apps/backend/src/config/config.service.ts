@@ -26,7 +26,10 @@ export class ConfigService {
       if (!config) {
         // Default config if not exists
         config = await this.systemConfigModel.create({
-          workingDirectory: path.join(process.cwd(), "repositories"),
+          workingDirectory: path.join(
+            process.env.HOME || process.env.USERPROFILE || "",
+            "repositories"
+          ),
         });
       }
 
@@ -34,7 +37,10 @@ export class ConfigService {
     } catch (error) {
       console.error("Error loading config:", error);
       this.config = {
-        workingDirectory: path.join(process.cwd(), "repositories"),
+        workingDirectory: path.join(
+          process.env.HOME || process.env.USERPROFILE || "",
+          "repositories"
+        ),
       };
     }
 

@@ -6,6 +6,14 @@ import {
   Grid,
   LinearProgress,
   Box,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Chip,
 } from "@mui/material";
 import { getServiceMetrics, type ServiceMetrics } from "../api/pm2";
 
@@ -34,6 +42,23 @@ const formatUptime = (uptime: number): string => {
   if (minutes > 0) parts.push(`${minutes}m`);
 
   return parts.join(" ") || "0m";
+};
+
+const getStatusColor = (status: string) => {
+  switch (status.toLowerCase()) {
+    case "online":
+      return "success";
+    case "stopped":
+      return "default";
+    case "errored":
+    case "error":
+      return "error";
+    case "stopping":
+    case "launching":
+      return "warning";
+    default:
+      return "default";
+  }
 };
 
 interface ServiceMetricsProps {
@@ -81,69 +106,127 @@ export const ServiceMetricsComponent = ({ serviceId }: ServiceMetricsProps) => {
   }
 
   return (
-    <Grid container spacing={2}>
-      <Grid item xs={12} md={6}>
-        <Card>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              CPU Usage
-            </Typography>
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="body2" color="text.secondary">
-                {metrics.cpu.toFixed(1)}%
+    <Box>
+      <Grid container spacing={2}>
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                CPU Usage
               </Typography>
-              <LinearProgress
-                variant="determinate"
-                value={metrics.cpu}
-                sx={{ mt: 1 }}
-              />
-            </Box>
-          </CardContent>
-        </Card>
-      </Grid>
-      <Grid item xs={12} md={6}>
-        <Card>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Memory Usage
-            </Typography>
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="body2" color="text.secondary">
-                {formatBytes(metrics.memory)}
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  {metrics.cpu.toFixed(1)}%
+                </Typography>
+                <LinearProgress
+                  variant="determinate"
+                  value={metrics.cpu}
+                  sx={{ mt: 1 }}
+                />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Memory Usage
               </Typography>
-              <LinearProgress
-                variant="determinate"
-                value={(metrics.memory / (1024 * 1024 * 100)) * 100} // Assuming 100MB as max for visualization
-                sx={{ mt: 1 }}
-              />
-            </Box>
-          </CardContent>
-        </Card>
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  {formatBytes(metrics.memory)}
+                </Typography>
+                <LinearProgress
+                  variant="determinate"
+                  value={(metrics.memory / (1024 * 1024 * 100)) * 100} // Assuming 100MB as max for visualization
+                  sx={{ mt: 1 }}
+                />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Uptime
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {formatUptime(metrics.uptime)}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Restarts
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {metrics.restarts}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Instances
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {metrics.instances}{" "}
+                {metrics.instances === 1 ? "instance" : "instances"}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
       </Grid>
-      <Grid item xs={12} md={6}>
-        <Card>
+
+      {/* Individual Process Status for Cluster Mode */}
+      {metrics.processes && metrics.processes.length > 1 && (
+        <Card sx={{ mt: 2 }}>
           <CardContent>
             <Typography variant="h6" gutterBottom>
-              Uptime
+              Process Details (Cluster Mode)
             </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {formatUptime(metrics.uptime)}
-            </Typography>
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>PID</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>CPU (%)</TableCell>
+                    <TableCell>Memory</TableCell>
+                    <TableCell>Uptime</TableCell>
+                    <TableCell>Restarts</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {metrics.processes.map((process, index) => (
+                    <TableRow key={process.pid || index}>
+                      <TableCell>{process.pid}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={process.status}
+                          color={getStatusColor(process.status)}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell>{process.cpu.toFixed(1)}%</TableCell>
+                      <TableCell>{formatBytes(process.memory)}</TableCell>
+                      <TableCell>{formatUptime(process.uptime)}</TableCell>
+                      <TableCell>{process.restarts}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
           </CardContent>
         </Card>
-      </Grid>
-      <Grid item xs={12} md={6}>
-        <Card>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Restarts
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {metrics.restarts}
-            </Typography>
-          </CardContent>
-        </Card>
-      </Grid>
-    </Grid>
+      )}
+    </Box>
   );
 };

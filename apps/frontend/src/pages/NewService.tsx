@@ -21,7 +21,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { createService } from "../api/services";
 import { getRepositories, getBranches } from "../api/github";
 import { getNodeVersions } from "../api/services";
-import { Repository, PM2Service } from "@pm2-dashboard/shared";
+import { Repository, PM2Service, ServiceStatus } from "@pm2-dashboard/shared";
 
 interface NewServiceForm {
   name: string;
@@ -34,6 +34,9 @@ interface NewServiceForm {
   script: string;
   args?: string;
   nodeVersion: string;
+  cluster?: number | null;
+  useCluster: boolean;
+  clusterInstances: number;
 }
 
 export default function NewService() {
@@ -50,11 +53,15 @@ export default function NewService() {
       script: "",
       args: "",
       nodeVersion: "",
+      cluster: null,
+      useCluster: false,
+      clusterInstances: 1,
     },
   });
 
   const selectedRepo = watch("repositoryUrl");
   const useNpm = watch("useNpm");
+  const useCluster = watch("useCluster");
 
   // Fetch repositories
   const { data: repositories, isLoading: isLoadingRepos } = useQuery({
@@ -89,8 +96,9 @@ export default function NewService() {
         script: data.script,
         args: data.args,
         nodeVersion: data.nodeVersion,
+        cluster: data.useCluster ? data.clusterInstances : null,
         environments: [],
-        status: "stopped",
+        status: ServiceStatus.STOPPED,
       };
       return createService(serviceData);
     },
@@ -227,6 +235,60 @@ export default function NewService() {
                   )}
                 />
               </Grid>
+
+              <Grid item xs={12}>
+                <Controller
+                  name="useCluster"
+                  control={control}
+                  render={({ field }) => (
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={field.value}
+                          onChange={(e) => field.onChange(e.target.checked)}
+                        />
+                      }
+                      label="Use cluster mode"
+                    />
+                  )}
+                />
+              </Grid>
+
+              {useCluster && (
+                <Grid item xs={12}>
+                  <Controller
+                    name="clusterInstances"
+                    control={control}
+                    rules={{
+                      required:
+                        "Number of instances is required when using cluster mode",
+                      min: {
+                        value: 1,
+                        message: "Must have at least 1 instance",
+                      },
+                      max: { value: 16, message: "Cannot exceed 16 instances" },
+                    }}
+                    render={({ field, fieldState: { error } }) => (
+                      <TextField
+                        {...field}
+                        label="Number of Cluster Instances"
+                        fullWidth
+                        type="number"
+                        inputProps={{ min: 1, max: 16 }}
+                        error={!!error}
+                        helperText={
+                          error?.message || "Number of cluster instances to run"
+                        }
+                        value={field.value}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value, 10);
+                          field.onChange(isNaN(value) ? 1 : value);
+                        }}
+                      />
+                    )}
+                  />
+                </Grid>
+              )}
 
               <Grid item xs={12}>
                 <Controller

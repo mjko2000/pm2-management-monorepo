@@ -13,7 +13,7 @@ import {
   IconButton,
 } from "@mui/material";
 import { useQuery } from "react-query";
-import { PM2Service } from "@pm2-dashboard/shared";
+import { PM2Service, ServiceStatus } from "@pm2-dashboard/shared";
 import { getServices } from "../api/services";
 import { SystemMetricsComponent } from "../components/SystemMetrics";
 import { ServiceMetricsComponent } from "../components/ServiceMetrics";
@@ -32,9 +32,29 @@ export default function Dashboard() {
 
   const stats = {
     total: services?.length || 0,
-    running: services?.filter((s) => s.status === "online").length || 0,
-    stopped: services?.filter((s) => s.status === "stopped").length || 0,
-    errored: services?.filter((s) => s.status === "errored").length || 0,
+    running:
+      services?.filter((s) => s.status === ServiceStatus.ONLINE).length || 0,
+    stopped:
+      services?.filter((s) => s.status === ServiceStatus.STOPPED).length || 0,
+    errored:
+      services?.filter((s) => s.status === ServiceStatus.ERRORED).length || 0,
+    building:
+      services?.filter((s) => s.status === ServiceStatus.BUILDING).length || 0,
+  };
+
+  const getStatusColor = (status?: ServiceStatus) => {
+    switch (status) {
+      case ServiceStatus.ONLINE:
+        return "success";
+      case ServiceStatus.STOPPED:
+        return "default";
+      case ServiceStatus.ERRORED:
+        return "error";
+      case ServiceStatus.BUILDING:
+        return "warning";
+      default:
+        return "default";
+    }
   };
 
   return (
@@ -63,6 +83,19 @@ export default function Dashboard() {
               </Typography>
               <Typography variant="h3" color="success.main">
                 {stats.running}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <Card>
+            <CardContent>
+              <Typography color="textSecondary" gutterBottom>
+                Building
+              </Typography>
+              <Typography variant="h3" color="warning.main">
+                {stats.building}
               </Typography>
             </CardContent>
           </Card>
@@ -122,14 +155,8 @@ export default function Dashboard() {
                 >
                   <Typography variant="h6">{service.name}</Typography>
                   <Chip
-                    label={service.status || "unknown"}
-                    color={
-                      service.status === "online"
-                        ? "success"
-                        : service.status === "stopped"
-                          ? "default"
-                          : "error"
-                    }
+                    label={service.status || ServiceStatus.UNKNOWN}
+                    color={getStatusColor(service.status)}
                     size="small"
                   />
                 </Box>
@@ -139,7 +166,7 @@ export default function Dashboard() {
                 <Typography variant="body2" color="textSecondary">
                   Environment: {service.activeEnvironment || "None"}
                 </Typography>
-                {service.status === "online" && (
+                {service.status === ServiceStatus.ONLINE && (
                   <Box sx={{ mt: 2 }}>
                     <Button
                       variant="outlined"

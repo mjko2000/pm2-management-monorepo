@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { Document } from "mongoose";
-import { Environment } from "@pm2-dashboard/shared";
+import { Environment, ServiceStatus } from "@pm2-dashboard/shared";
 
 @Schema()
 export class Service extends Document {
@@ -42,13 +42,19 @@ export class Service extends Document {
 
   @Prop({
     required: true,
-    enum: ["online", "stopped", "errored"],
-    default: "stopped",
+    enum: Object.values(ServiceStatus),
+    default: ServiceStatus.STOPPED,
   })
-  status: string;
+  status: ServiceStatus;
 
   @Prop()
-  pm2Id?: number;
+  pm2AppName?: string;
+
+  @Prop()
+  repoPath?: string;
+
+  @Prop({ default: null })
+  cluster?: number | null;
 }
 
 export const ServiceSchema = SchemaFactory.createForClass(Service);

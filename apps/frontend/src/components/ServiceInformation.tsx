@@ -6,7 +6,7 @@ import {
   Chip,
   Divider,
 } from "@mui/material";
-import { PM2Service } from "@pm2-dashboard/shared";
+import { PM2Service, ServiceStatus } from "@pm2-dashboard/shared";
 
 interface ServiceInformationProps {
   service: PM2Service;
@@ -15,6 +15,21 @@ interface ServiceInformationProps {
 export default function ServiceInformation({
   service,
 }: ServiceInformationProps) {
+  const getStatusColor = (status?: ServiceStatus) => {
+    switch (status) {
+      case ServiceStatus.ONLINE:
+        return "success";
+      case ServiceStatus.STOPPED:
+        return "default";
+      case ServiceStatus.ERRORED:
+        return "error";
+      case ServiceStatus.BUILDING:
+        return "warning";
+      default:
+        return "default";
+    }
+  };
+
   return (
     <Card sx={{ height: "100%" }}>
       <CardHeader title="Service Information" />
@@ -37,14 +52,8 @@ export default function ServiceInformation({
         <Typography variant="body1" gutterBottom>
           <strong>Status:</strong>{" "}
           <Chip
-            label={service.status || "unknown"}
-            color={
-              service.status === "online"
-                ? "success"
-                : service.status === "stopped"
-                  ? "default"
-                  : "error"
-            }
+            label={service.status || ServiceStatus.UNKNOWN}
+            color={getStatusColor(service.status)}
             size="small"
           />
         </Typography>

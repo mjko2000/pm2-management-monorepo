@@ -14,6 +14,7 @@ import {
   PlayArrow as StartIcon,
   Stop as StopIcon,
   Refresh as RestartIcon,
+  SystemUpdateAlt as ReloadIcon,
   Delete as DeleteIcon,
   Visibility as ViewIcon,
 } from "@mui/icons-material";
@@ -23,13 +24,25 @@ import {
   startService,
   stopService,
   restartService,
+  reloadService,
   deleteService,
 } from "../api/services";
-import { PM2Service } from "@pm2-dashboard/shared";
+import { PM2Service, ServiceStatus } from "@pm2-dashboard/shared";
+import { useState } from "react";
+import ConfirmationDialog from "../components/ConfirmationDialog";
 
 export default function Services() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    open: boolean;
+    serviceId: string;
+    serviceName: string;
+  }>({
+    open: false,
+    serviceId: "",
+    serviceName: "",
+  });
 
   const { data: services = [], isLoading } = useQuery<PM2Service[], Error>({
     queryKey: ["services"],
@@ -57,6 +70,13 @@ export default function Services() {
     },
   });
 
+  const reloadMutation = useMutation<void, Error, string>({
+    mutationFn: reloadService,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["services"] });
+    },
+  });
+
   const deleteMutation = useMutation<void, Error, string>({
     mutationFn: deleteService,
     onSuccess: () => {
@@ -66,15 +86,37 @@ export default function Services() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "online":
+      case ServiceStatus.ONLINE:
         return "success";
-      case "stopped":
+      case ServiceStatus.STOPPED:
         return "default";
-      case "errored":
+      case ServiceStatus.ERRORED:
         return "error";
+      case ServiceStatus.BUILDING:
+        return "warning";
       default:
         return "default";
     }
+  };
+
+  const handleDeleteClick = (serviceId: string, serviceName: string) => {
+    setDeleteConfirmation({
+      open: true,
+      serviceId,
+      serviceName,
+    });
+  };
+
+  const handleDeleteConfirm = () => {
+    deleteMutation.mutate(deleteConfirmation.serviceId);
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteConfirmation({
+      open: false,
+      serviceId: "",
+      serviceName: "",
+    });
   };
 
   if (isLoading) {
@@ -165,27 +207,46 @@ export default function Services() {
                   <IconButton
                     size="small"
                     onClick={() => startMutation.mutate(service._id)}
-                    disabled={service.status === "online"}
+                    disabled={
+                      service.status === ServiceStatus.ONLINE ||
+                      service.status === ServiceStatus.BUILDING
+                    }
                   >
                     <StartIcon />
                   </IconButton>
                   <IconButton
                     size="small"
                     onClick={() => stopMutation.mutate(service._id)}
-                    disabled={service.status === "stopped"}
+                    disabled={
+                      service.status === ServiceStatus.STOPPED ||
+                      service.status === ServiceStatus.BUILDING
+                    }
                   >
                     <StopIcon />
                   </IconButton>
                   <IconButton
                     size="small"
                     onClick={() => restartMutation.mutate(service._id)}
-                    disabled={service.status === "stopped"}
+                    disabled={
+                      service.status === ServiceStatus.STOPPED ||
+                      service.status === ServiceStatus.BUILDING
+                    }
                   >
                     <RestartIcon />
                   </IconButton>
                   <IconButton
                     size="small"
-                    onClick={() => deleteMutation.mutate(service._id)}
+                    onClick={() => reloadMutation.mutate(service._id)}
+                    disabled={
+                      service.status === ServiceStatus.STOPPED ||
+                      service.status === ServiceStatus.BUILDING
+                    }
+                  >
+                    <ReloadIcon />
+                  </IconButton>
+                  <IconButton
+                    size="small"
+                    onClick={() => handleDeleteClick(service._id, service.name)}
                   >
                     <DeleteIcon />
                   </IconButton>
@@ -195,6 +256,17 @@ export default function Services() {
           </Grid>
         ))}
       </Grid>
+
+      <ConfirmationDialog
+        open={deleteConfirmation.open}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Service"
+        message={`Are you sure you want to delete "${deleteConfirmation.serviceName}"? This action cannot be undone and will remove the service and its repository files.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmColor="error"
+      />
     </Box>
   );
 }

@@ -1,11 +1,22 @@
 import { SystemMetrics } from "@pm2-dashboard/shared";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
 
+export interface ProcessInfo {
+  pid: number;
+  status: string;
+  cpu: number;
+  memory: number;
+  uptime: number;
+  restarts: number;
+}
+
 export interface ServiceMetrics {
   cpu: number;
   memory: number;
   uptime: number;
   restarts: number;
+  instances: number;
+  processes?: ProcessInfo[]; // Individual process details for cluster mode
 }
 
 export const getSystemMetrics = async (): Promise<SystemMetrics> => {

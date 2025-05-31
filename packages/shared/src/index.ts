@@ -5,6 +5,15 @@ export interface Environment {
   variables: Record<string, string> | null;
 }
 
+// Service status enum
+export enum ServiceStatus {
+  ONLINE = "online",
+  STOPPED = "stopped",
+  ERRORED = "errored",
+  BUILDING = "building",
+  UNKNOWN = "unknown",
+}
+
 // GitHub repository interface
 export interface Repository {
   id: string;
@@ -25,12 +34,14 @@ export interface PM2Service {
   args?: string;
   environments: Environment[];
   activeEnvironment?: string;
-  status?: "online" | "stopped" | "errored" | "unknown";
-  pm2Id?: number;
+  status?: ServiceStatus;
+  pm2AppName?: string; // PM2 app name for managing cluster instances
   npmArgs?: string;
   npmScript?: string;
   useNpm?: boolean;
   nodeVersion?: string;
+  repoPath?: string; // Path to the cloned repository on the server
+  cluster?: number | null; // null for off, number for cluster instances
 }
 
 // GitHub Token Config

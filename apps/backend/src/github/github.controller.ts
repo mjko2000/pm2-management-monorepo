@@ -10,6 +10,7 @@ class SetTokenDto {
 class CloneRepoDto {
   repoUrl: string;
   branch: string;
+  serviceName?: string;
 }
 
 @Controller("github")
@@ -24,10 +25,9 @@ export class GitHubController {
     return { success: true };
   }
 
-  @Get("validate-token")
-  async validateToken(): Promise<{ valid: boolean }> {
-    const isValid = await this.githubService.validateToken();
-    return { valid: isValid };
+  @Get("token/validate")
+  async validateGitHubToken(): Promise<boolean> {
+    return await this.githubService.validateToken();
   }
 
   @Get("repositories")
@@ -46,7 +46,8 @@ export class GitHubController {
   ): Promise<{ path: string }> {
     const path = await this.githubService.cloneRepository(
       cloneRepoDto.repoUrl,
-      cloneRepoDto.branch
+      cloneRepoDto.branch,
+      cloneRepoDto.serviceName
     );
     return { path };
   }

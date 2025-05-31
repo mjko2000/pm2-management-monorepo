@@ -96,6 +96,16 @@ export async function restartService(id: string): Promise<void> {
   }
 }
 
+export async function reloadService(id: string): Promise<void> {
+  const response = await fetch(`${API_URL}/services/${id}/reload`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to reload service");
+  }
+}
+
 export async function addEnvironment(
   serviceId: string,
   environment: Omit<Environment, "id">

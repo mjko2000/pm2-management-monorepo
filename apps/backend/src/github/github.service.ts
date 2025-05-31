@@ -14,11 +14,7 @@ export class GitHubService {
   private octokit: Octokit;
   private git: SimpleGit;
 
-  constructor(
-    private configService: ConfigService,
-    @InjectModel(SystemConfig.name)
-    private systemConfigModel: Model<SystemConfig>
-  ) {
+  constructor(private configService: ConfigService) {
     this.initializeOctokit();
     this.git = simpleGit();
   }
@@ -33,11 +29,7 @@ export class GitHubService {
   }
 
   async setToken(token: string): Promise<void> {
-    const config =
-      (await this.systemConfigModel.findOne().exec()) ||
-      new this.systemConfigModel();
-    config.github = { token };
-    await config.save();
+    await this.configService.setGitHubToken(token);
 
     this.octokit = new Octokit({
       auth: token,
@@ -89,14 +81,21 @@ export class GitHubService {
     }
   }
 
-  async cloneRepository(repoUrl: string, branch: string): Promise<string> {
+  async cloneRepository(
+    repoUrl: string,
+    branch: string,
+    serviceName?: string
+  ): Promise<string> {
     if (!this.octokit) {
       throw new Error("GitHub token not configured");
     }
 
     const workingDir = await this.configService.getWorkingDirectory();
     const repoName = this.extractRepoName(repoUrl);
-    const repoPath = path.join(workingDir, repoName);
+    const repoPathName = serviceName
+      ? `${repoName}-${this.createSlug(serviceName)}`
+      : repoName;
+    const repoPath = path.join(workingDir, repoPathName);
 
     // Create working directory if it doesn't exist
     if (!fs.existsSync(workingDir)) {
@@ -108,20 +107,30 @@ export class GitHubService {
       throw new Error("GitHub token not configured");
     }
 
-    // Clone or pull repository
+    // Check if repository already exists
     if (fs.existsSync(repoPath)) {
       // Repository exists, pull latest changes
-      await this.git
-        .cwd(repoPath)
-        .fetch("origin")
-        .reset(["--hard", `origin/${branch}`]);
+      return this.pullRepository(repoPath, branch);
     } else {
       // Clone new repository
       const cloneUrl = repoUrl.endsWith(".git") ? repoUrl : `${repoUrl}.git`;
       const authUrl = cloneUrl.replace("https://", `https://${token}@`);
 
       await this.git.clone(authUrl, repoPath, ["-b", branch]);
+      return repoPath;
     }
+  }
+
+  async pullRepository(repoPath: string, branch: string): Promise<string> {
+    if (!fs.existsSync(repoPath)) {
+      throw new Error("Repository path does not exist");
+    }
+
+    // Pull latest changes
+    await this.git
+      .cwd(repoPath)
+      .fetch("origin")
+      .reset(["--hard", `origin/${branch}`]);
 
     return repoPath;
   }
@@ -159,5 +168,12 @@ export class GitHubService {
       console.error("Error fetching branches:", error);
       throw new Error(`Failed to fetch branches for repository ${repoUrl}`);
     }
+  }
+
+  private createSlug(serviceName: string): string {
+    return serviceName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
   }
 }

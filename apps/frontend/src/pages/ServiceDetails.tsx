@@ -2,12 +2,13 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "react-query";
 import { Box, Typography, Grid } from "@mui/material";
-import { PM2Service, Environment } from "@pm2-dashboard/shared";
+import { PM2Service, Environment, ServiceStatus } from "@pm2-dashboard/shared";
 import {
   getService,
   startService,
   stopService,
   restartService,
+  reloadService,
   deleteService,
   addEnvironment,
   updateEnvironment,
@@ -23,6 +24,7 @@ import ServiceActions from "../components/ServiceActions";
 import ServiceInformation from "../components/ServiceInformation";
 import ServiceEnvironments from "../components/ServiceEnvironments";
 import Notifications from "../components/Notifications";
+import ConfirmationDialog from "../components/ConfirmationDialog";
 
 export default function ServiceDetails() {
   const { id } = useParams<{ id: string }>();
@@ -34,6 +36,16 @@ export default function ServiceDetails() {
   const [envDialogOpen, setEnvDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingEnv, setEditingEnv] = useState<Environment | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    open: boolean;
+    type: "service" | "environment";
+    itemName: string;
+    envName?: string;
+  }>({
+    open: false,
+    type: "service",
+    itemName: "",
+  });
 
   const { data: service, isLoading } = useQuery<PM2Service>(
     ["service", id],
@@ -70,6 +82,16 @@ export default function ServiceDetails() {
     },
     onError: () => {
       setError("Failed to restart service");
+    },
+  });
+
+  const reloadMutation = useMutation(reloadService, {
+    onSuccess: () => {
+      queryClient.invalidateQueries(["service", id]);
+      setSuccess("Service reloaded successfully");
+    },
+    onError: () => {
+      setError("Failed to reload service");
     },
   });
 
@@ -123,15 +145,51 @@ export default function ServiceDetails() {
     }
   };
 
+  const handleReload = async () => {
+    setProcessing(true);
+    try {
+      await reloadMutation.mutateAsync(id!);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const handleDelete = async () => {
-    if (window.confirm("Are you sure you want to delete this service?")) {
+    setDeleteConfirmation({
+      open: true,
+      type: "service",
+      itemName: service?.name || "",
+    });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (deleteConfirmation.type === "service") {
       setProcessing(true);
       try {
         await deleteMutation.mutateAsync(id!);
       } finally {
         setProcessing(false);
       }
+    } else if (
+      deleteConfirmation.type === "environment" &&
+      deleteConfirmation.envName
+    ) {
+      try {
+        await deleteEnvironment(id!, deleteConfirmation.envName);
+        queryClient.invalidateQueries(["service", id]);
+        setSuccess("Environment deleted successfully");
+      } catch (error) {
+        setError("Failed to delete environment");
+      }
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteConfirmation({
+      open: false,
+      type: "service",
+      itemName: "",
+    });
   };
 
   const handleEnvironmentSubmit = async (data: Environment) => {
@@ -153,15 +211,12 @@ export default function ServiceDetails() {
   };
 
   const handleDeleteEnvironment = async (envName: string) => {
-    if (window.confirm("Are you sure you want to delete this environment?")) {
-      try {
-        await deleteEnvironment(id!, envName);
-        queryClient.invalidateQueries(["service", id]);
-        setSuccess("Environment deleted successfully");
-      } catch (error) {
-        setError("Failed to delete environment");
-      }
-    }
+    setDeleteConfirmation({
+      open: true,
+      type: "environment",
+      itemName: envName,
+      envName,
+    });
   };
 
   const handleSetActiveEnvironment = async (envName: string) => {
@@ -203,12 +258,13 @@ export default function ServiceDetails() {
           onStart={handleStart}
           onStop={handleStop}
           onRestart={handleRestart}
+          onReload={handleReload}
           onEdit={() => setEditDialogOpen(true)}
           onDelete={handleDelete}
         />
       </Box>
 
-      {service.status === "online" && (
+      {service.status === ServiceStatus.ONLINE && (
         <>
           <Typography variant="h5" gutterBottom sx={{ mt: 4 }}>
             Service Metrics
@@ -238,7 +294,9 @@ export default function ServiceDetails() {
           />
         </Grid>
       </Grid>
-      <ServiceLogs serviceId={serviceId} />
+      {service.status === ServiceStatus.ONLINE && (
+        <ServiceLogs serviceId={serviceId} serviceStatus={service.status} />
+      )}
 
       <EnvironmentDialog
         open={envDialogOpen}
@@ -255,6 +313,21 @@ export default function ServiceDetails() {
         onClose={() => setEditDialogOpen(false)}
         onSubmit={handleEditService}
         service={service}
+      />
+
+      <ConfirmationDialog
+        open={deleteConfirmation.open}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title={`Delete ${deleteConfirmation.type === "service" ? "Service" : "Environment"}`}
+        message={
+          deleteConfirmation.type === "service"
+            ? `Are you sure you want to delete "${deleteConfirmation.itemName}"? This action cannot be undone and will remove the service and its repository files.`
+            : `Are you sure you want to delete the environment "${deleteConfirmation.itemName}"?`
+        }
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmColor="error"
       />
 
       <Notifications

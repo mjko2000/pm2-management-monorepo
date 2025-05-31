@@ -45,7 +45,11 @@ export default function EditServiceDialog({
     npmScript: "",
     npmArgs: "",
     nodeVersion: "",
+    cluster: null,
   });
+
+  const [useCluster, setUseCluster] = useState(false);
+  const [clusterInstances, setClusterInstances] = useState(1);
 
   // Fetch repositories
   const { data: repositories, isLoading: isLoadingRepos } = useQuery({
@@ -68,6 +72,7 @@ export default function EditServiceDialog({
 
   useEffect(() => {
     if (service) {
+      const hasCluster = Boolean(service.cluster && service.cluster > 0);
       setFormData({
         name: service.name,
         repositoryUrl: service.repositoryUrl,
@@ -79,7 +84,10 @@ export default function EditServiceDialog({
         npmScript: service.npmScript || "",
         npmArgs: service.npmArgs || "",
         nodeVersion: service.nodeVersion || "",
+        cluster: service.cluster || null,
       });
+      setUseCluster(hasCluster);
+      setClusterInstances(hasCluster ? service.cluster! : 1);
     }
   }, [service]);
 
@@ -197,6 +205,43 @@ export default function EditServiceDialog({
                 ))}
               </Select>
             </FormControl>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={useCluster}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setUseCluster(checked);
+                    setFormData((prev) => ({
+                      ...prev,
+                      cluster: checked ? clusterInstances : null,
+                    }));
+                  }}
+                />
+              }
+              label="Use cluster mode"
+            />
+            {useCluster && (
+              <TextField
+                label="Number of Cluster Instances"
+                value={clusterInstances}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value, 10);
+                  const instances = isNaN(value)
+                    ? 1
+                    : Math.max(1, Math.min(16, value));
+                  setClusterInstances(instances);
+                  setFormData((prev) => ({
+                    ...prev,
+                    cluster: instances,
+                  }));
+                }}
+                type="number"
+                inputProps={{ min: 1, max: 16 }}
+                fullWidth
+                helperText="Number of cluster instances to run"
+              />
+            )}
             <FormControlLabel
               control={
                 <Switch

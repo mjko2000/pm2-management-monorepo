@@ -22,6 +22,7 @@ import {
   Snackbar,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import { format } from "date-fns";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getLogs, clearLogs } from "../api/logs";
@@ -42,7 +43,7 @@ export const Logs: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ["logs", page, rowsPerPage, level, context],
     queryFn: () =>
       getLogs(
@@ -80,6 +81,10 @@ export const Logs: React.FC = () => {
     }
   };
 
+  const handleRefreshLogs = () => {
+    refetch();
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4" gutterBottom>
@@ -109,6 +114,12 @@ export const Logs: React.FC = () => {
           onChange={(e) => setContext(e.target.value)}
           sx={{ minWidth: 200 }}
         />
+
+        <Tooltip title="Reload Logs">
+          <IconButton onClick={handleRefreshLogs} disabled={isLoading}>
+            <RefreshIcon />
+          </IconButton>
+        </Tooltip>
 
         <Tooltip title="Clear All Logs">
           <IconButton onClick={handleClearLogs} color="error">

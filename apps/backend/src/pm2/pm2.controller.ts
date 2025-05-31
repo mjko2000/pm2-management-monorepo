@@ -16,7 +16,7 @@ import { Service } from "@/schemas/service.schema";
 
 // DTOs for requests
 class CreateServiceDto
-  implements Omit<IPM2Service, "_id" | "status" | "pm2Id">
+  implements Omit<IPM2Service, "_id" | "status" | "pm2AppName">
 {
   name: string;
   repositoryUrl: string;
@@ -29,6 +29,9 @@ class CreateServiceDto
   args?: string;
   environments: Environment[];
   activeEnvironment?: string;
+  nodeVersion?: string;
+  repoPath?: string;
+  cluster?: number | null;
 }
 
 class UpdateServiceDto implements Partial<IPM2Service> {
@@ -41,6 +44,9 @@ class UpdateServiceDto implements Partial<IPM2Service> {
   npmScript?: string;
   npmArgs?: string;
   args?: string;
+  nodeVersion?: string;
+  repoPath?: string;
+  cluster?: number | null;
 }
 
 class EnvironmentDto implements Environment {
@@ -149,6 +155,22 @@ export class PM2Controller {
     } catch (error) {
       throw new HttpException(
         error.message || "Failed to restart service",
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  @Post(":id/reload")
+  async reloadService(@Param("id") id: string): Promise<Service> {
+    try {
+      const service = await this.pm2Service.reloadService(id);
+      if (!service) {
+        throw new HttpException("Service not found", HttpStatus.NOT_FOUND);
+      }
+      return service;
+    } catch (error) {
+      throw new HttpException(
+        error.message || "Failed to reload service",
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }

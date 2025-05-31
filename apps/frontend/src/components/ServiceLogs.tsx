@@ -10,12 +10,17 @@ import {
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { useQuery } from "react-query";
 import { getServiceLogs } from "../api/services";
+import { ServiceStatus } from "@pm2-dashboard/shared";
 
 interface ServiceLogsProps {
   serviceId: string;
+  serviceStatus?: ServiceStatus;
 }
 
-export const ServiceLogs: React.FC<ServiceLogsProps> = ({ serviceId }) => {
+export const ServiceLogs: React.FC<ServiceLogsProps> = ({
+  serviceId,
+  serviceStatus,
+}) => {
   const [lines, setLines] = useState(100);
 
   const { data, isLoading, refetch } = useQuery(
@@ -29,6 +34,11 @@ export const ServiceLogs: React.FC<ServiceLogsProps> = ({ serviceId }) => {
   const handleRefresh = () => {
     refetch();
   };
+
+  const isReloadDisabled =
+    serviceStatus === ServiceStatus.BUILDING ||
+    serviceStatus === ServiceStatus.STOPPED ||
+    serviceStatus === ServiceStatus.ERRORED;
 
   return (
     <Box>
@@ -44,7 +54,10 @@ export const ServiceLogs: React.FC<ServiceLogsProps> = ({ serviceId }) => {
           onChange={(e) => setLines(Number(e.target.value))}
           sx={{ width: 100, mr: 2 }}
         />
-        <IconButton onClick={handleRefresh} disabled={isLoading}>
+        <IconButton
+          onClick={handleRefresh}
+          disabled={isLoading || isReloadDisabled}
+        >
           <RefreshIcon />
         </IconButton>
       </Box>
