@@ -126,6 +126,8 @@ export class GitHubService {
       throw new Error("Repository path does not exist");
     }
 
+    await this.resetRemoteUrl(repoPath);
+
     // Pull latest changes
     await this.git
       .cwd(repoPath)
@@ -133,6 +135,31 @@ export class GitHubService {
       .reset(["--hard", `origin/${branch}`]);
 
     return repoPath;
+  }
+
+  private async resetRemoteUrl(repoPath: string): Promise<void> {
+    // Get token and set remote URL with token for authentication
+    const token = await this.getToken();
+    if (!token) {
+      throw new Error("GitHub token not configured");
+    }
+
+    // Read the current remote URL
+    const remotes = await this.git.cwd(repoPath).getRemotes(true);
+    const originRemote = remotes.find((r) => r.name === "origin");
+    if (!originRemote || !originRemote.refs.fetch) {
+      throw new Error("Origin remote not found in repository");
+    }
+
+    // Build authenticated remote URL
+    let remoteUrl = originRemote.refs.fetch;
+    if (remoteUrl.startsWith("https://")) {
+      // Remove any existing credentials in the URL
+      remoteUrl = remoteUrl.replace(/^https:\/\/[^@]+@/, "https://");
+      const authUrl = remoteUrl.replace("https://", `https://${token}@`);
+      // Set the remote URL with token
+      await this.git.cwd(repoPath).remote(["set-url", "origin", authUrl]);
+    }
   }
 
   private extractRepoName(repoUrl: string): string {
