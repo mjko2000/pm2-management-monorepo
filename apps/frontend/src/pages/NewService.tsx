@@ -37,6 +37,7 @@ interface NewServiceForm {
   cluster?: number | null;
   useCluster: boolean;
   clusterInstances: number;
+  autostart: boolean;
 }
 
 export default function NewService() {
@@ -56,6 +57,7 @@ export default function NewService() {
       cluster: null,
       useCluster: false,
       clusterInstances: 1,
+      autostart: false,
     },
   });
 
@@ -99,6 +101,7 @@ export default function NewService() {
         cluster: data.useCluster ? data.clusterInstances : null,
         environments: [],
         status: ServiceStatus.STOPPED,
+        autostart: data.autostart,
       };
       return createService(serviceData);
     },
@@ -289,6 +292,24 @@ export default function NewService() {
                   />
                 </Grid>
               )}
+
+              <Grid item xs={12}>
+                <Controller
+                  name="autostart"
+                  control={control}
+                  render={({ field }) => (
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={field.value}
+                          onChange={(e) => field.onChange(e.target.checked)}
+                        />
+                      }
+                      label="Enable autostart on backend startup"
+                    />
+                  )}
+                />
+              </Grid>
 
               <Grid item xs={12}>
                 <Controller

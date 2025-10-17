@@ -42,6 +42,7 @@ export interface PM2Service {
   nodeVersion?: string;
   repoPath?: string; // Path to the cloned repository on the server
   cluster?: number | null; // null for off, number for cluster instances
+  autostart?: boolean; // Auto-start service when backend starts
 }
 
 // GitHub Token Config

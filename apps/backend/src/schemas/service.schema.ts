@@ -55,6 +55,9 @@ export class Service extends Document {
 
   @Prop({ default: null })
   cluster?: number | null;
+
+  @Prop({ default: false })
+  autostart?: boolean;
 }
 
 export const ServiceSchema = SchemaFactory.createForClass(Service);

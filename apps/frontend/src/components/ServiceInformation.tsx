@@ -57,6 +57,14 @@ export default function ServiceInformation({
             size="small"
           />
         </Typography>
+        <Typography variant="body1" gutterBottom>
+          <strong>Autostart:</strong>{" "}
+          <Chip
+            label={service.autostart ? "Enabled" : "Disabled"}
+            color={service.autostart ? "success" : "default"}
+            size="small"
+          />
+        </Typography>
       </CardContent>
     </Card>
   );

@@ -13,6 +13,7 @@ export interface PM2Service {
   activeEnvironment?: string;
   status: "online" | "stopped" | "errored";
   pm2Id?: string;
+  autostart?: boolean;
 }
 
 export interface Environment {

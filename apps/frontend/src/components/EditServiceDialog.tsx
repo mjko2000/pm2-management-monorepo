@@ -46,6 +46,7 @@ export default function EditServiceDialog({
     npmArgs: "",
     nodeVersion: "",
     cluster: null,
+    autostart: false,
   });
 
   const [useCluster, setUseCluster] = useState(false);
@@ -85,6 +86,7 @@ export default function EditServiceDialog({
         npmArgs: service.npmArgs || "",
         nodeVersion: service.nodeVersion || "",
         cluster: service.cluster || null,
+        autostart: service.autostart || false,
       });
       setUseCluster(hasCluster);
       setClusterInstances(hasCluster ? service.cluster! : 1);
@@ -95,7 +97,7 @@ export default function EditServiceDialog({
     const { name, value, checked } = e.target;
     setFormData((prev) => ({
       ...prev,
-      [name]: name === "useNpm" ? checked : value,
+      [name]: name === "useNpm" || name === "autostart" ? checked : value,
     }));
   };
 
@@ -242,6 +244,16 @@ export default function EditServiceDialog({
                 helperText="Number of cluster instances to run"
               />
             )}
+            <FormControlLabel
+              control={
+                <Switch
+                  name="autostart"
+                  checked={formData.autostart || false}
+                  onChange={handleInputChange}
+                />
+              }
+              label="Enable autostart on backend startup"
+            />
             <FormControlLabel
               control={
                 <Switch

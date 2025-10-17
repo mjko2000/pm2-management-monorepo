@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, OnModuleInit } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import * as pm2 from "pm2";
@@ -26,7 +26,7 @@ const disconnect = promisify(pm2.disconnect.bind(pm2));
 const del = promisify(pm2.delete.bind(pm2));
 
 @Injectable()
-export class PM2Service {
+export class PM2Service implements OnModuleInit {
   private nvmDir: string;
   constructor(
     private configService: ConfigService,
@@ -37,6 +37,44 @@ export class PM2Service {
   ) {
     this.logger.setContext("PM2Service");
     this.nvmDir = path.join(process.env.HOME, ".nvm", "versions", "node");
+  }
+
+  async onModuleInit() {
+    this.logger.log("PM2Service initialized, starting autostart services...");
+    await this.startAutostartServices();
+  }
+
+  async startAutostartServices(): Promise<void> {
+    try {
+      const services = await this.serviceModel.find({ autostart: true }).exec();
+      this.logger.log(
+        `Found ${services.length} services with autostart enabled`
+      );
+
+      for (const service of services) {
+        if (!service.activeEnvironment) {
+          this.logger.warn(
+            `Service ${service.name} has autostart enabled but no active environment set, skipping...`
+          );
+          continue;
+        }
+
+        this.logger.log(`Starting service ${service.name} (autostart)...`);
+        try {
+          await this.startService(service._id.toString());
+          this.logger.log(
+            `Service ${service.name} started successfully (autostart)`
+          );
+        } catch (error) {
+          this.logger.error(
+            `Failed to start service ${service.name} (autostart):`,
+            error
+          );
+        }
+      }
+    } catch (error) {
+      this.logger.error("Error starting autostart services:", error);
+    }
   }
 
   async getServices(): Promise<Service[]> {
