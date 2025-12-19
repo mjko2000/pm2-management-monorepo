@@ -84,12 +84,9 @@ export default function Profile() {
 
   const profileMutation = useMutation({
     mutationFn: (data: UpdateProfileDto) => updateProfile(data),
-    onSuccess: async (updatedUser) => {
+    onSuccess: () => {
       setProfileSuccess("Profile updated successfully");
       setProfileError("");
-      // Refresh the auth context with new user data
-      // For simplicity, we'll just show a success message
-      // In production, you might want to update the context directly
     },
     onError: (err: Error) => {
       setProfileError(err.message);

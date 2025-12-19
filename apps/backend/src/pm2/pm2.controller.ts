@@ -16,6 +16,10 @@ import { PM2Service } from "./pm2.service";
 import { PM2Service as IPM2Service, Environment } from "@pm2-dashboard/shared";
 import { Service } from "@/schemas/service.schema";
 import { JwtAuthGuard } from "@/auth/guards/jwt-auth.guard";
+import {
+  CurrentUser,
+  CurrentUserPayload,
+} from "@/auth/decorators/current-user.decorator";
 
 // DTOs for requests
 class CreateServiceDto
@@ -35,6 +39,7 @@ class CreateServiceDto
   nodeVersion?: string;
   repoPath?: string;
   cluster?: number | null;
+  githubTokenId?: string;
 }
 
 class UpdateServiceDto implements Partial<IPM2Service> {
@@ -91,9 +96,10 @@ export class PM2Controller {
 
   @Post()
   async createService(
+    @CurrentUser() user: CurrentUserPayload,
     @Body() createServiceDto: CreateServiceDto
   ): Promise<Service> {
-    return this.pm2Service.createService(createServiceDto);
+    return this.pm2Service.createService(createServiceDto, user.userId);
   }
 
   @Put(":id")

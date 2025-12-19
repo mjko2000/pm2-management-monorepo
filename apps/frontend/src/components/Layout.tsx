@@ -20,12 +20,12 @@ import {
 import {
   Menu as MenuIcon,
   Dashboard as DashboardIcon,
-  Settings as SettingsIcon,
   Build as BuildIcon,
   Assessment as AssessmentIcon,
   Logout as LogoutIcon,
   Person as PersonIcon,
   Group as GroupIcon,
+  Key as KeyIcon,
 } from "@mui/icons-material";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -64,10 +64,10 @@ export default function Layout({ children }: LayoutProps) {
     { text: "Dashboard", icon: <DashboardIcon />, path: "/dashboard" },
     { text: "Services", icon: <BuildIcon />, path: "/services" },
     { text: "Logs", icon: <AssessmentIcon />, path: "/logs" },
+    { text: "GitHub Tokens", icon: <KeyIcon />, path: "/github-tokens" },
     ...(user?.role === "admin"
       ? [{ text: "Team", icon: <GroupIcon />, path: "/team" }]
       : []),
-    { text: "Settings", icon: <SettingsIcon />, path: "/settings" },
   ];
 
   const drawer = (
@@ -103,18 +103,18 @@ export default function Layout({ children }: LayoutProps) {
       >
         <Toolbar sx={{ justifyContent: "space-between" }}>
           <Box sx={{ display: "flex", alignItems: "center" }}>
-            <IconButton
-              color="inherit"
-              aria-label="open drawer"
-              edge="start"
-              onClick={handleDrawerToggle}
-              sx={{ mr: 2, display: { sm: "none" } }}
-            >
-              <MenuIcon />
-            </IconButton>
-            <Typography variant="h6" noWrap component="div">
-              PM2 Dashboard
-            </Typography>
+          <IconButton
+            color="inherit"
+            aria-label="open drawer"
+            edge="start"
+            onClick={handleDrawerToggle}
+            sx={{ mr: 2, display: { sm: "none" } }}
+          >
+            <MenuIcon />
+          </IconButton>
+          <Typography variant="h6" noWrap component="div">
+            PM2 Dashboard
+          </Typography>
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <Typography

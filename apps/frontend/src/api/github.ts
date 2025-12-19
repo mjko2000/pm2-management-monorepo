@@ -1,27 +1,15 @@
 import { Repository } from "@pm2-dashboard/shared";
-import { apiGet, apiPost } from "./client";
+import { apiGet } from "./client";
 
-export async function getRepositories(): Promise<Repository[]> {
-  return apiGet<Repository[]>("/github/repositories");
+export async function getRepositories(tokenId: string): Promise<Repository[]> {
+  return apiGet<Repository[]>(`/github/repositories?tokenId=${tokenId}`);
 }
 
-export async function getBranches(repoUrl: string): Promise<string[]> {
+export async function getBranches(
+  repoUrl: string,
+  tokenId: string
+): Promise<string[]> {
   return apiGet<string[]>(
-    `/github/branches?repoUrl=${encodeURIComponent(repoUrl)}`
+    `/github/branches?repoUrl=${encodeURIComponent(repoUrl)}&tokenId=${tokenId}`
   );
-}
-
-export async function setGitHubToken(
-  token: string,
-  username?: string
-): Promise<void> {
-  return apiPost("/github/token", { token, username });
-}
-
-export async function validateGitHubToken(): Promise<boolean> {
-  try {
-    return await apiGet<boolean>("/github/token/validate");
-  } catch {
-    return false;
-  }
 }

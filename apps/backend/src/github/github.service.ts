@@ -6,67 +6,44 @@ import { ConfigService } from "../config/config.service";
 import { Repository } from "@pm2-dashboard/shared";
 import * as fs from "fs";
 import * as path from "path";
-import { SystemConfig } from "../schemas/system-config.schema";
 import simpleGit, { SimpleGit } from "simple-git";
+import { GithubTokenService } from "./github-token.service";
 
 @Injectable()
 export class GitHubService {
-  private octokit: Octokit;
   private git: SimpleGit;
 
-  constructor(private configService: ConfigService) {
-    this.initializeOctokit();
+  constructor(
+    private configService: ConfigService,
+    private githubTokenService: GithubTokenService
+  ) {
     this.git = simpleGit();
   }
 
-  private async initializeOctokit(): Promise<void> {
-    const config = await this.configService.getSystemConfig();
-    if (config.github?.token) {
-      this.octokit = new Octokit({
-        auth: config.github.token,
+  private createOctokit(token: string): Octokit {
+    return new Octokit({ auth: token });
+  }
+
+  async validateToken(tokenValue: string): Promise<boolean> {
+    return this.githubTokenService.validateToken(tokenValue);
+  }
+
+  async getRepositories(
+    tokenId: string,
+    userId: string
+  ): Promise<Repository[]> {
+    const tokenValue = await this.githubTokenService.getTokenValue(
+      tokenId,
+      userId
+    );
+    const octokit = this.createOctokit(tokenValue);
+
+    try {
+      const { data: repos } = await octokit.repos.listForAuthenticatedUser({
+        sort: "updated",
+        direction: "desc",
+        per_page: 100,
       });
-    }
-  }
-
-  async setToken(token: string): Promise<void> {
-    await this.configService.setGitHubToken(token);
-
-    this.octokit = new Octokit({
-      auth: token,
-    });
-  }
-
-  async getToken(): Promise<string | undefined> {
-    const config = await this.configService.getSystemConfig();
-    return config.github?.token;
-  }
-
-  async validateToken(): Promise<boolean> {
-    if (!this.octokit) {
-      return false;
-    }
-
-    try {
-      await this.octokit.users.getAuthenticated();
-      return true;
-    } catch (error) {
-      return false;
-    }
-  }
-
-  async getRepositories(): Promise<Repository[]> {
-    if (!this.octokit) {
-      throw new UnauthorizedException("GitHub token not configured");
-    }
-
-    try {
-      const { data: repos } = await this.octokit.repos.listForAuthenticatedUser(
-        {
-          sort: "updated",
-          direction: "desc",
-          per_page: 100,
-        }
-      );
 
       return repos.map((repo) => ({
         id: repo.id.toString(),
@@ -84,11 +61,14 @@ export class GitHubService {
   async cloneRepository(
     repoUrl: string,
     branch: string,
+    tokenId: string,
+    userId: string,
     serviceName?: string
   ): Promise<string> {
-    if (!this.octokit) {
-      throw new Error("GitHub token not configured");
-    }
+    const tokenValue = await this.githubTokenService.getTokenValue(
+      tokenId,
+      userId
+    );
 
     const workingDir = await this.configService.getWorkingDirectory();
     const repoName = this.extractRepoName(repoUrl);
@@ -102,31 +82,30 @@ export class GitHubService {
       fs.mkdirSync(workingDir, { recursive: true });
     }
 
-    const token = await this.getToken();
-    if (!token) {
-      throw new Error("GitHub token not configured");
-    }
-
     // Check if repository already exists
     if (fs.existsSync(repoPath)) {
       // Repository exists, pull latest changes
-      return this.pullRepository(repoPath, branch);
+      return this.pullRepository(repoPath, branch, tokenValue);
     } else {
       // Clone new repository
       const cloneUrl = repoUrl.endsWith(".git") ? repoUrl : `${repoUrl}.git`;
-      const authUrl = cloneUrl.replace("https://", `https://${token}@`);
+      const authUrl = cloneUrl.replace("https://", `https://${tokenValue}@`);
 
       await this.git.clone(authUrl, repoPath, ["-b", branch]);
       return repoPath;
     }
   }
 
-  async pullRepository(repoPath: string, branch: string): Promise<string> {
+  async pullRepository(
+    repoPath: string,
+    branch: string,
+    tokenValue: string
+  ): Promise<string> {
     if (!fs.existsSync(repoPath)) {
       throw new Error("Repository path does not exist");
     }
 
-    await this.resetRemoteUrl(repoPath);
+    await this.resetRemoteUrl(repoPath, tokenValue);
 
     // Pull latest changes
     await this.git
@@ -137,13 +116,23 @@ export class GitHubService {
     return repoPath;
   }
 
-  private async resetRemoteUrl(repoPath: string): Promise<void> {
-    // Get token and set remote URL with token for authentication
-    const token = await this.getToken();
-    if (!token) {
-      throw new Error("GitHub token not configured");
-    }
+  async pullRepositoryWithTokenId(
+    repoPath: string,
+    branch: string,
+    tokenId: string,
+    userId: string
+  ): Promise<string> {
+    const tokenValue = await this.githubTokenService.getTokenValue(
+      tokenId,
+      userId
+    );
+    return this.pullRepository(repoPath, branch, tokenValue);
+  }
 
+  private async resetRemoteUrl(
+    repoPath: string,
+    tokenValue: string
+  ): Promise<void> {
     // Read the current remote URL
     const remotes = await this.git.cwd(repoPath).getRemotes(true);
     const originRemote = remotes.find((r) => r.name === "origin");
@@ -156,7 +145,7 @@ export class GitHubService {
     if (remoteUrl.startsWith("https://")) {
       // Remove any existing credentials in the URL
       remoteUrl = remoteUrl.replace(/^https:\/\/[^@]+@/, "https://");
-      const authUrl = remoteUrl.replace("https://", `https://${token}@`);
+      const authUrl = remoteUrl.replace("https://", `https://${tokenValue}@`);
       // Set the remote URL with token
       await this.git.cwd(repoPath).remote(["set-url", "origin", authUrl]);
     }
@@ -171,10 +160,16 @@ export class GitHubService {
     return match[1];
   }
 
-  async getBranches(repoUrl: string): Promise<string[]> {
-    if (!this.octokit) {
-      throw new UnauthorizedException("GitHub token not configured");
-    }
+  async getBranches(
+    repoUrl: string,
+    tokenId: string,
+    userId: string
+  ): Promise<string[]> {
+    const tokenValue = await this.githubTokenService.getTokenValue(
+      tokenId,
+      userId
+    );
+    const octokit = this.createOctokit(tokenValue);
 
     try {
       // Extract owner and repo from full GitHub URL
@@ -184,7 +179,7 @@ export class GitHubService {
       }
 
       const [, owner, repo] = match;
-      const { data: branches } = await this.octokit.repos.listBranches({
+      const { data: branches } = await octokit.repos.listBranches({
         owner,
         repo,
         per_page: 100,

@@ -21,10 +21,12 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { createService } from "../api/services";
 import { getRepositories, getBranches } from "../api/github";
 import { getNodeVersions } from "../api/services";
+import { getGithubTokens, GithubToken } from "../api/githubTokens";
 import { Repository, PM2Service, ServiceStatus } from "@pm2-dashboard/shared";
 
 interface NewServiceForm {
   name: string;
+  githubTokenId: string;
   repositoryUrl: string;
   branch: string;
   sourceDirectory?: string;
@@ -45,6 +47,7 @@ export default function NewService() {
   const { control, handleSubmit, watch, setValue } = useForm<NewServiceForm>({
     defaultValues: {
       name: "",
+      githubTokenId: "",
       repositoryUrl: "",
       branch: "",
       sourceDirectory: "",
@@ -61,21 +64,29 @@ export default function NewService() {
     },
   });
 
+  const selectedTokenId = watch("githubTokenId");
   const selectedRepo = watch("repositoryUrl");
   const useNpm = watch("useNpm");
   const useCluster = watch("useCluster");
 
-  // Fetch repositories
+  // Fetch GitHub tokens
+  const { data: tokens, isLoading: isLoadingTokens } = useQuery({
+    queryKey: ["github-tokens"],
+    queryFn: getGithubTokens,
+  });
+
+  // Fetch repositories for selected token
   const { data: repositories, isLoading: isLoadingRepos } = useQuery({
-    queryKey: ["repositories"],
-    queryFn: getRepositories,
+    queryKey: ["repositories", selectedTokenId],
+    queryFn: () => getRepositories(selectedTokenId),
+    enabled: !!selectedTokenId,
   });
 
   // Fetch branches for selected repository
   const { data: branches, isLoading: isLoadingBranches } = useQuery({
-    queryKey: ["branches", selectedRepo],
-    queryFn: () => getBranches(selectedRepo),
-    enabled: !!selectedRepo,
+    queryKey: ["branches", selectedRepo, selectedTokenId],
+    queryFn: () => getBranches(selectedRepo, selectedTokenId),
+    enabled: !!selectedRepo && !!selectedTokenId,
   });
 
   // Fetch Node.js versions
@@ -87,7 +98,7 @@ export default function NewService() {
   // Create service mutation
   const createServiceMutation = useMutation({
     mutationFn: (data: NewServiceForm) => {
-      const serviceData: Omit<PM2Service, "_id"> = {
+      const serviceData: Omit<PM2Service, "_id"> & { githubTokenId: string } = {
         name: data.name,
         repositoryUrl: data.repositoryUrl,
         branch: data.branch,
@@ -102,6 +113,7 @@ export default function NewService() {
         environments: [],
         status: ServiceStatus.STOPPED,
         autostart: data.autostart,
+        githubTokenId: data.githubTokenId,
       };
       return createService(serviceData);
     },
@@ -114,11 +126,43 @@ export default function NewService() {
     createServiceMutation.mutate(data);
   };
 
+  // Reset repository and branch when token changes
+  const handleTokenChange = (tokenId: string) => {
+    setValue("githubTokenId", tokenId, {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
+    setValue("repositoryUrl", "");
+    setValue("branch", "");
+  };
+
+  // Reset branch when repository changes
+  const handleRepoChange = (repoUrl: string) => {
+    setValue("repositoryUrl", repoUrl, {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
+    setValue("branch", "");
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4" gutterBottom>
         Add New Service
       </Typography>
+
+      {(!tokens || tokens.length === 0) && !isLoadingTokens && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          You need to add a GitHub token before creating a service.{" "}
+          <Button
+            size="small"
+            onClick={() => navigate("/github-tokens")}
+            sx={{ ml: 1 }}
+          >
+            Add Token
+          </Button>
+        </Alert>
+      )}
 
       <Card>
         <CardContent>
@@ -143,6 +187,45 @@ export default function NewService() {
 
               <Grid item xs={12}>
                 <Controller
+                  name="githubTokenId"
+                  control={control}
+                  rules={{ required: "GitHub token is required" }}
+                  render={({ field, fieldState: { error } }) => (
+                    <FormControl fullWidth error={!!error}>
+                      <InputLabel>GitHub Token</InputLabel>
+                      <Select
+                        {...field}
+                        label="GitHub Token"
+                        onChange={(e) => handleTokenChange(e.target.value)}
+                        endAdornment={
+                          isLoadingTokens ? (
+                            <CircularProgress size={20} sx={{ mr: 2 }} />
+                          ) : null
+                        }
+                      >
+                        {tokens?.map((token: GithubToken) => (
+                          <MenuItem key={token._id} value={token._id}>
+                            {token.name}{" "}
+                            {token.visibility === "public"
+                              ? "(Public)"
+                              : "(Private)"}
+                            {!token.isOwner &&
+                              ` - by ${token.createdBy.username}`}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                      {error && (
+                        <Typography variant="caption" color="error">
+                          {error.message}
+                        </Typography>
+                      )}
+                    </FormControl>
+                  )}
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Controller
                   name="repositoryUrl"
                   control={control}
                   rules={{ required: "Repository is required" }}
@@ -151,9 +234,15 @@ export default function NewService() {
                       <InputLabel>Repository</InputLabel>
                       <Select
                         {...field}
+                        onChange={(e) =>
+                          handleRepoChange(e.target.value as string)
+                        }
                         label="Repository"
+                        disabled={!selectedTokenId}
                         endAdornment={
-                          isLoadingRepos ? <CircularProgress size={20} /> : null
+                          isLoadingRepos ? (
+                            <CircularProgress size={20} sx={{ mr: 2 }} />
+                          ) : null
                         }
                       >
                         {repositories?.map((repo: Repository) => (
@@ -162,6 +251,16 @@ export default function NewService() {
                           </MenuItem>
                         ))}
                       </Select>
+                      {!selectedTokenId && (
+                        <Typography variant="caption" color="text.secondary">
+                          Select a GitHub token first
+                        </Typography>
+                      )}
+                      {error && (
+                        <Typography variant="caption" color="error">
+                          {error.message}
+                        </Typography>
+                      )}
                     </FormControl>
                   )}
                 />
@@ -177,11 +276,17 @@ export default function NewService() {
                       <InputLabel>Branch</InputLabel>
                       <Select
                         {...field}
+                        onChange={(e) =>
+                          setValue("branch", e.target.value as string, {
+                            shouldValidate: true,
+                            shouldDirty: true,
+                          })
+                        }
                         label="Branch"
                         disabled={!selectedRepo}
                         endAdornment={
                           isLoadingBranches ? (
-                            <CircularProgress size={20} />
+                            <CircularProgress size={20} sx={{ mr: 2 }} />
                           ) : null
                         }
                       >
@@ -191,6 +296,11 @@ export default function NewService() {
                           </MenuItem>
                         ))}
                       </Select>
+                      {error && (
+                        <Typography variant="caption" color="error">
+                          {error.message}
+                        </Typography>
+                      )}
                     </FormControl>
                   )}
                 />
@@ -224,7 +334,7 @@ export default function NewService() {
                         label="Node.js Version"
                         endAdornment={
                           isLoadingNodeVersions ? (
-                            <CircularProgress size={20} />
+                            <CircularProgress size={20} sx={{ mr: 2 }} />
                           ) : null
                         }
                       >
@@ -436,7 +546,11 @@ export default function NewService() {
                   <Button
                     type="submit"
                     variant="contained"
-                    disabled={createServiceMutation.isPending}
+                    disabled={
+                      createServiceMutation.isPending ||
+                      !tokens ||
+                      tokens.length === 0
+                    }
                   >
                     Create Service
                   </Button>

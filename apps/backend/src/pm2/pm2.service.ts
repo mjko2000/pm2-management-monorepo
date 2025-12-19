@@ -91,8 +91,14 @@ export class PM2Service implements OnModuleInit {
     return service;
   }
 
-  async createService(serviceData: Omit<IPM2Service, "_id">): Promise<Service> {
-    const newService = await this.serviceModel.create(serviceData);
+  async createService(
+    serviceData: Omit<IPM2Service, "_id"> & { githubTokenId?: string },
+    userId: string
+  ): Promise<Service> {
+    const newService = await this.serviceModel.create({
+      ...serviceData,
+      createdBy: userId,
+    });
     return newService;
   }
 
@@ -205,10 +211,17 @@ export class PM2Service implements OnModuleInit {
       await service.save();
 
       // Ensure repository is available (clone if not exists, pull if exists)
+      if (!service.githubTokenId || !service.createdBy) {
+        throw new Error(
+          "Service must have a GitHub token and creator assigned"
+        );
+      }
       const repoPath = await this.ensureRepositoryAvailable(
         service.repositoryUrl,
         service.branch,
         service.name,
+        service.githubTokenId.toString(),
+        service.createdBy.toString(),
         service.repoPath
       );
 
@@ -319,10 +332,17 @@ export class PM2Service implements OnModuleInit {
       }
 
       // Pull latest changes from repository
+      if (!service.githubTokenId || !service.createdBy) {
+        throw new Error(
+          "Service must have a GitHub token and creator assigned"
+        );
+      }
       const repoPath = await this.pullLatestChanges(
         service.repositoryUrl,
         service.branch,
         service.name,
+        service.githubTokenId.toString(),
+        service.createdBy.toString(),
         service.repoPath
       );
 
@@ -367,6 +387,8 @@ export class PM2Service implements OnModuleInit {
     repoUrl: string,
     branch: string,
     serviceName: string,
+    tokenId: string,
+    userId: string,
     existingRepoPath?: string
   ): Promise<string> {
     const repoPath =
@@ -378,12 +400,23 @@ export class PM2Service implements OnModuleInit {
       this.logger.log(
         `Repository already exists at ${repoPath}, pulling latest changes...`
       );
-      return this.githubService.pullRepository(repoPath, branch);
+      return this.githubService.pullRepositoryWithTokenId(
+        repoPath,
+        branch,
+        tokenId,
+        userId
+      );
     } else {
       this.logger.log(
         `Repository not found at ${repoPath}, cloning from ${repoUrl}...`
       );
-      return this.githubService.cloneRepository(repoUrl, branch, serviceName);
+      return this.githubService.cloneRepository(
+        repoUrl,
+        branch,
+        tokenId,
+        userId,
+        serviceName
+      );
     }
   }
 
@@ -391,6 +424,8 @@ export class PM2Service implements OnModuleInit {
     repoUrl: string,
     branch: string,
     serviceName: string,
+    tokenId: string,
+    userId: string,
     existingRepoPath?: string
   ): Promise<string> {
     const repoPath =
@@ -403,7 +438,12 @@ export class PM2Service implements OnModuleInit {
       );
     }
 
-    return this.githubService.pullRepository(repoPath, branch);
+    return this.githubService.pullRepositoryWithTokenId(
+      repoPath,
+      branch,
+      tokenId,
+      userId
+    );
   }
 
   private async generateRepositoryPath(
