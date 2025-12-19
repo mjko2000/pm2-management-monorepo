@@ -203,7 +203,7 @@ export class PM2Service implements OnModuleInit {
   async updateService(
     user: CurrentUserPayload,
     id: string,
-    serviceData: Partial<IPM2Service>
+    serviceData: Partial<IPM2Service> & { githubTokenId?: string }
   ): Promise<Service | undefined> {
     const service = await this.serviceModel.findById(id).exec();
 

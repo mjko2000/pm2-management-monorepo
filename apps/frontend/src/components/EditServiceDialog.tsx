@@ -16,10 +16,15 @@ import {
   CircularProgress,
   SelectChangeEvent,
 } from "@mui/material";
-import { PM2Service, Repository, ServiceVisibility } from "@pm2-dashboard/shared";
+import {
+  PM2Service,
+  Repository,
+  ServiceVisibility,
+} from "@pm2-dashboard/shared";
 import { useQuery } from "react-query";
 import { getRepositories, getBranches } from "../api/github";
 import { getNodeVersions } from "../api/services";
+import { getGithubTokens, GithubToken } from "../api/githubTokens";
 
 interface EditServiceDialogProps {
   open: boolean;
@@ -34,7 +39,9 @@ export default function EditServiceDialog({
   onSubmit,
   service,
 }: EditServiceDialogProps) {
-  const [formData, setFormData] = useState<Partial<PM2Service>>({
+  const [formData, setFormData] = useState<
+    Partial<PM2Service> & { githubTokenId?: string }
+  >({
     name: "",
     repositoryUrl: "",
     branch: "",
@@ -48,22 +55,31 @@ export default function EditServiceDialog({
     cluster: null,
     autostart: false,
     visibility: "private" as ServiceVisibility,
+    githubTokenId: "",
   });
 
   const [useCluster, setUseCluster] = useState(false);
   const [clusterInstances, setClusterInstances] = useState(1);
 
-  // Fetch repositories
+  // Fetch GitHub tokens
+  const { data: tokens, isLoading: isLoadingTokens } = useQuery({
+    queryKey: ["github-tokens"],
+    queryFn: getGithubTokens,
+  });
+
+  // Fetch repositories for selected token
   const { data: repositories, isLoading: isLoadingRepos } = useQuery({
-    queryKey: ["repositories"],
-    queryFn: getRepositories,
+    queryKey: ["repositories", formData.githubTokenId],
+    queryFn: () => getRepositories(formData.githubTokenId || ""),
+    enabled: !!formData.githubTokenId,
   });
 
   // Fetch branches for selected repository
   const { data: branches, isLoading: isLoadingBranches } = useQuery({
-    queryKey: ["branches", formData.repositoryUrl],
-    queryFn: () => getBranches(formData.repositoryUrl!),
-    enabled: !!formData.repositoryUrl,
+    queryKey: ["branches", formData.repositoryUrl, formData.githubTokenId],
+    queryFn: () =>
+      getBranches(formData.repositoryUrl!, formData.githubTokenId || ""),
+    enabled: !!formData.repositoryUrl && !!formData.githubTokenId,
   });
 
   // Fetch Node.js versions
@@ -89,6 +105,9 @@ export default function EditServiceDialog({
         cluster: service.cluster || null,
         autostart: service.autostart || false,
         visibility: service.visibility || "private",
+        githubTokenId:
+          (service as PM2Service & { githubTokenId?: string }).githubTokenId ||
+          "",
       });
       setUseCluster(hasCluster);
       setClusterInstances(hasCluster ? service.cluster! : 1);
@@ -148,15 +167,35 @@ export default function EditServiceDialog({
               fullWidth
             />
             <FormControl fullWidth>
+              <InputLabel>GitHub Token</InputLabel>
+              <Select
+                name="githubTokenId"
+                value={formData.githubTokenId || ""}
+                label="GitHub Token"
+                onChange={handleSelectChange}
+                endAdornment={
+                  isLoadingTokens ? <CircularProgress size={20} /> : null
+                }
+              >
+                {tokens?.map((token: GithubToken) => (
+                  <MenuItem key={token._id} value={token._id}>
+                    {token.name}{" "}
+                    {token.visibility === "public" ? "(Public)" : "(Private)"}
+                    {!token.isOwner && ` - by ${token.createdBy.username}`}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl fullWidth>
               <InputLabel>Repository</InputLabel>
               <Select
                 value={formData.repositoryUrl}
                 label="Repository"
                 onChange={handleRepositoryChange}
+                disabled={!formData.githubTokenId}
                 endAdornment={
                   isLoadingRepos ? <CircularProgress size={20} /> : null
                 }
-                disabled
               >
                 {repositories?.map((repo: Repository) => (
                   <MenuItem key={repo.id} value={repo.url}>
@@ -171,7 +210,7 @@ export default function EditServiceDialog({
                 value={formData.branch}
                 label="Branch"
                 onChange={handleBranchChange}
-                disabled={!formData.repositoryUrl}
+                disabled={!formData.repositoryUrl || !formData.githubTokenId}
                 endAdornment={
                   isLoadingBranches ? <CircularProgress size={20} /> : null
                 }

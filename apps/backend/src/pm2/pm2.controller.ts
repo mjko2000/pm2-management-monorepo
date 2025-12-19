@@ -57,6 +57,7 @@ class UpdateServiceDto implements Partial<IPM2Service> {
   repoPath?: string;
   cluster?: number | null;
   visibility?: "private" | "public";
+  githubTokenId?: string;
 }
 
 class EnvironmentDto implements Environment {
