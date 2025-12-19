@@ -1,6 +1,5 @@
 import { Log } from "@pm2-dashboard/shared";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
+import { apiGet, apiDelete } from "./client";
 
 export interface GetLogsResponse {
   logs: Log[];
@@ -21,18 +20,9 @@ export const getLogs = async (
   if (level) params.append("level", level);
   if (context) params.append("context", context);
 
-  const response = await fetch(`${API_URL}/logs?${params.toString()}`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch logs");
-  }
-  return response.json();
+  return apiGet<GetLogsResponse>(`/logs?${params.toString()}`);
 };
 
 export const clearLogs = async (): Promise<void> => {
-  const response = await fetch(`${API_URL}/logs`, {
-    method: "DELETE",
-  });
-  if (!response.ok) {
-    throw new Error("Failed to clear logs");
-  }
+  return apiDelete("/logs");
 };

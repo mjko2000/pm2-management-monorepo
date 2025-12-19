@@ -1,131 +1,56 @@
 import { PM2Service, Environment } from "@pm2-dashboard/shared";
 import { ServiceMetrics } from "./pm2";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
+import { apiGet, apiPost, apiPut, apiDelete } from "./client";
 
 export async function getServices(): Promise<PM2Service[]> {
-  const response = await fetch(`${API_URL}/services`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch services");
-  }
-  return response.json();
+  return apiGet<PM2Service[]>("/services");
 }
 
 export async function getService(id: string): Promise<PM2Service> {
-  const response = await fetch(`${API_URL}/services/${id}`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch service");
-  }
-  return response.json();
+  return apiGet<PM2Service>(`/services/${id}`);
 }
 
 export async function createService(
   service: Omit<PM2Service, "_id">
 ): Promise<PM2Service> {
-  const response = await fetch(`${API_URL}/services`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(service),
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to create service");
-  }
-
-  return response.json();
+  return apiPost<PM2Service>("/services", service);
 }
 
 export async function updateService(
   id: string,
   service: Partial<PM2Service>
 ): Promise<PM2Service> {
-  const response = await fetch(`${API_URL}/services/${id}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(service),
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to update service");
-  }
-
-  return response.json();
+  return apiPut<PM2Service>(`/services/${id}`, service);
 }
 
 export async function deleteService(id: string): Promise<void> {
-  const response = await fetch(`${API_URL}/services/${id}`, {
-    method: "DELETE",
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to delete service");
-  }
+  return apiDelete(`/services/${id}`);
 }
 
 export async function startService(id: string): Promise<void> {
-  const response = await fetch(`${API_URL}/services/${id}/start`, {
-    method: "POST",
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to start service");
-  }
+  return apiPost(`/services/${id}/start`);
 }
 
 export async function stopService(id: string): Promise<void> {
-  const response = await fetch(`${API_URL}/services/${id}/stop`, {
-    method: "POST",
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to stop service");
-  }
+  return apiPost(`/services/${id}/stop`);
 }
 
 export async function restartService(id: string): Promise<void> {
-  const response = await fetch(`${API_URL}/services/${id}/restart`, {
-    method: "POST",
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to restart service");
-  }
+  return apiPost(`/services/${id}/restart`);
 }
 
 export async function reloadService(id: string): Promise<void> {
-  const response = await fetch(`${API_URL}/services/${id}/reload`, {
-    method: "POST",
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to reload service");
-  }
+  return apiPost(`/services/${id}/reload`);
 }
 
 export async function addEnvironment(
   serviceId: string,
   environment: Omit<Environment, "id">
 ): Promise<Environment> {
-  const response = await fetch(
-    `${API_URL}/services/${serviceId}/environments`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(environment),
-    }
+  return apiPost<Environment>(
+    `/services/${serviceId}/environments`,
+    environment
   );
-
-  if (!response.ok) {
-    throw new Error("Failed to add environment");
-  }
-
-  return response.json();
 }
 
 export async function updateEnvironment(
@@ -133,83 +58,41 @@ export async function updateEnvironment(
   environmentId: string,
   environment: Partial<Environment>
 ): Promise<Environment> {
-  const response = await fetch(
-    `${API_URL}/services/${serviceId}/environments/${environmentId}`,
-    {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(environment),
-    }
+  return apiPut<Environment>(
+    `/services/${serviceId}/environments/${environmentId}`,
+    environment
   );
-
-  if (!response.ok) {
-    throw new Error("Failed to update environment");
-  }
-
-  return response.json();
 }
 
 export async function deleteEnvironment(
   serviceId: string,
   environmentId: string
 ): Promise<void> {
-  const response = await fetch(
-    `${API_URL}/services/${serviceId}/environments/${environmentId}`,
-    {
-      method: "DELETE",
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error("Failed to delete environment");
-  }
+  return apiDelete(`/services/${serviceId}/environments/${environmentId}`);
 }
 
 export async function setActiveEnvironment(
   serviceId: string,
   environmentId: string
 ): Promise<void> {
-  const response = await fetch(
-    `${API_URL}/services/${serviceId}/environments/${environmentId}/activate`,
-    {
-      method: "POST",
-    }
+  return apiPost(
+    `/services/${serviceId}/environments/${environmentId}/activate`
   );
-
-  if (!response.ok) {
-    throw new Error("Failed to set active environment");
-  }
 }
 
 export const getServiceMetrics = async (
   serviceId: string
 ): Promise<ServiceMetrics> => {
-  const response = await fetch(`${API_URL}/services/${serviceId}/metrics`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch service metrics");
-  }
-  return response.json();
+  return apiGet<ServiceMetrics>(`/services/${serviceId}/metrics`);
 };
 
 export const getServiceLogs = async (
   serviceId: string,
   lines: number = 100
 ): Promise<{ logs: string }> => {
-  const response = await fetch(
-    `${API_URL}/services/${serviceId}/logs?lines=${lines}`
-  );
-  if (!response.ok) {
-    throw new Error("Failed to fetch service logs");
-  }
-  return response.json();
+  return apiGet<{ logs: string }>(`/services/${serviceId}/logs?lines=${lines}`);
 };
 
 export const getNodeVersions = async (): Promise<string[]> => {
-  const response = await fetch(`${API_URL}/services/node/versions`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch Node.js versions");
-  }
-  return response.json();
+  return apiGet<string[]>("/services/node/versions");
 };

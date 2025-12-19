@@ -9,10 +9,13 @@ import {
   HttpException,
   HttpStatus,
   Query,
+  UseGuards,
 } from "@nestjs/common";
+import { ApiBearerAuth } from "@nestjs/swagger";
 import { PM2Service } from "./pm2.service";
 import { PM2Service as IPM2Service, Environment } from "@pm2-dashboard/shared";
 import { Service } from "@/schemas/service.schema";
+import { JwtAuthGuard } from "@/auth/guards/jwt-auth.guard";
 
 // DTOs for requests
 class CreateServiceDto
@@ -61,6 +64,8 @@ class UpdateEnvironmentDto implements Partial<Environment> {
   variables?: Record<string, string>;
 }
 
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller("services")
 export class PM2Controller {
   constructor(private readonly pm2Service: PM2Service) {}

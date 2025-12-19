@@ -9,6 +9,11 @@ import NewService from "./pages/NewService";
 import Settings from "./pages/Settings";
 import Dashboard from "./pages/Dashboard";
 import { Logs } from "./pages/Logs";
+import Team from "./pages/Team";
+import Profile from "./pages/Profile";
+import Login from "./pages/Login";
+import { AuthProvider } from "./contexts/AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -17,17 +22,31 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <Layout>
+        <AuthProvider>
           <Routes>
-            <Route index path="/" element={<Navigate to="/dashboard" />} />
-            <Route index path="/dashboard" element={<Dashboard />} />
-            <Route path="/services" element={<Services />} />
-            <Route path="/services/new" element={<NewService />} />
-            <Route path="/services/:id" element={<ServiceDetails />} />
-            <Route path="/logs" element={<Logs />} />
-            <Route path="/settings" element={<Settings />} />
+            <Route path="/login" element={<Login />} />
+            <Route
+              path="/*"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Routes>
+                      <Route index path="/" element={<Navigate to="/dashboard" />} />
+                      <Route path="/dashboard" element={<Dashboard />} />
+                      <Route path="/services" element={<Services />} />
+                      <Route path="/services/new" element={<NewService />} />
+                      <Route path="/services/:id" element={<ServiceDetails />} />
+                      <Route path="/logs" element={<Logs />} />
+                      <Route path="/team" element={<Team />} />
+                      <Route path="/profile" element={<Profile />} />
+                      <Route path="/settings" element={<Settings />} />
+                    </Routes>
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
           </Routes>
-        </Layout>
+        </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

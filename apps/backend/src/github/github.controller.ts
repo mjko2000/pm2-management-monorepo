@@ -1,6 +1,8 @@
-import { Controller, Get, Post, Body, Param, Query } from "@nestjs/common";
+import { Controller, Get, Post, Body, Param, Query, UseGuards } from "@nestjs/common";
+import { ApiBearerAuth } from "@nestjs/swagger";
 import { GitHubService } from "./github.service";
 import { Repository } from "@pm2-dashboard/shared";
+import { JwtAuthGuard } from "@/auth/guards/jwt-auth.guard";
 
 class SetTokenDto {
   token: string;
@@ -13,6 +15,8 @@ class CloneRepoDto {
   serviceName?: string;
 }
 
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller("github")
 export class GitHubController {
   constructor(private readonly githubService: GitHubService) {}

@@ -1,7 +1,11 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, HttpException, HttpStatus, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth } from "@nestjs/swagger";
 import { PM2Service } from '../pm2/pm2.service';
 import { Environment } from '@pm2-dashboard/shared';
+import { JwtAuthGuard } from "@/auth/guards/jwt-auth.guard";
 
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller('environment')
 export class EnvironmentController {
   constructor(private readonly pm2Service: PM2Service) {}
