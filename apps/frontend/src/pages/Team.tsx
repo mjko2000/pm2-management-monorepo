@@ -204,7 +204,8 @@ export default function Team() {
     return (
       <Box sx={{ p: 3 }}>
         <Alert severity="error">
-          You don't have permission to access this page. Admin access required.
+          You don&apos;t have permission to access this page. Admin access
+          required.
         </Alert>
       </Box>
     );
@@ -249,7 +250,7 @@ export default function Team() {
           <TableContainer component={Paper} elevation={0}>
             <Table>
               <TableHead>
-                <TableRow sx={{ bgcolor: "grey.50" }}>
+                <TableRow>
                   <TableCell>User</TableCell>
                   <TableCell>Email</TableCell>
                   <TableCell>Role</TableCell>
@@ -281,7 +282,9 @@ export default function Team() {
                       }}
                     >
                       <TableCell>
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                        <Box
+                          sx={{ display: "flex", alignItems: "center", gap: 2 }}
+                        >
                           <Avatar
                             sx={{
                               width: 36,
@@ -318,10 +321,15 @@ export default function Team() {
                               <PersonIcon sx={{ fontSize: 16 }} />
                             )
                           }
-                          label={user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                          label={
+                            user.role.charAt(0).toUpperCase() +
+                            user.role.slice(1)
+                          }
                           size="small"
                           color={user.role === "admin" ? "primary" : "default"}
-                          variant={user.role === "admin" ? "filled" : "outlined"}
+                          variant={
+                            user.role === "admin" ? "filled" : "outlined"
+                          }
                         />
                       </TableCell>
                       <TableCell>
@@ -528,7 +536,10 @@ export default function Team() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+      >
         <DialogTitle>Delete User</DialogTitle>
         <DialogContent>
           <Typography>
@@ -552,4 +563,3 @@ export default function Team() {
     </Box>
   );
 }
-

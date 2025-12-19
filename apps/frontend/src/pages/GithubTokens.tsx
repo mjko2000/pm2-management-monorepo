@@ -251,7 +251,7 @@ export default function GithubTokens() {
           <TableContainer component={Paper} elevation={0}>
             <Table>
               <TableHead>
-                <TableRow sx={{ bgcolor: "grey.50" }}>
+                <TableRow>
                   <TableCell>Name</TableCell>
                   <TableCell>Visibility</TableCell>
                   <TableCell>Owner</TableCell>
