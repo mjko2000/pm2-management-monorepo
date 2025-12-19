@@ -16,7 +16,7 @@ import {
   CircularProgress,
   SelectChangeEvent,
 } from "@mui/material";
-import { PM2Service, Repository } from "@pm2-dashboard/shared";
+import { PM2Service, Repository, ServiceVisibility } from "@pm2-dashboard/shared";
 import { useQuery } from "react-query";
 import { getRepositories, getBranches } from "../api/github";
 import { getNodeVersions } from "../api/services";
@@ -47,6 +47,7 @@ export default function EditServiceDialog({
     nodeVersion: "",
     cluster: null,
     autostart: false,
+    visibility: "private" as ServiceVisibility,
   });
 
   const [useCluster, setUseCluster] = useState(false);
@@ -87,6 +88,7 @@ export default function EditServiceDialog({
         nodeVersion: service.nodeVersion || "",
         cluster: service.cluster || null,
         autostart: service.autostart || false,
+        visibility: service.visibility || "private",
       });
       setUseCluster(hasCluster);
       setClusterInstances(hasCluster ? service.cluster! : 1);
@@ -254,6 +256,22 @@ export default function EditServiceDialog({
               }
               label="Enable autostart on backend startup"
             />
+            <FormControl fullWidth>
+              <InputLabel>Visibility</InputLabel>
+              <Select
+                name="visibility"
+                value={formData.visibility || "private"}
+                label="Visibility"
+                onChange={handleSelectChange}
+              >
+                <MenuItem value="private">
+                  Private - Only you can access this service
+                </MenuItem>
+                <MenuItem value="public">
+                  Public - All users can access and manage this service
+                </MenuItem>
+              </Select>
+            </FormControl>
             <FormControlLabel
               control={
                 <Switch

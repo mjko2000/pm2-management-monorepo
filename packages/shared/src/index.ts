@@ -5,6 +5,15 @@ export interface Environment {
   variables: Record<string, string> | null;
 }
 
+// Service visibility type
+export type ServiceVisibility = "private" | "public";
+
+// Service owner interface
+export interface ServiceOwner {
+  _id: string;
+  username: string;
+}
+
 // Service status enum
 export enum ServiceStatus {
   ONLINE = "online",
@@ -43,6 +52,9 @@ export interface PM2Service {
   repoPath?: string; // Path to the cloned repository on the server
   cluster?: number | null; // null for off, number for cluster instances
   autostart?: boolean; // Auto-start service when backend starts
+  visibility?: ServiceVisibility; // private or public
+  createdBy?: ServiceOwner; // Owner of the service
+  isOwner?: boolean; // Whether the current user is the owner
 }
 
 // GitHub Token Config

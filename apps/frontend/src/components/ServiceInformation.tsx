@@ -65,6 +65,20 @@ export default function ServiceInformation({
             size="small"
           />
         </Typography>
+        <Typography variant="body1" gutterBottom>
+          <strong>Visibility:</strong>{" "}
+          <Chip
+            label={service.visibility === "public" ? "Public" : "Private"}
+            color={service.visibility === "public" ? "info" : "warning"}
+            size="small"
+          />
+        </Typography>
+        {service.createdBy && (
+          <Typography variant="body1" gutterBottom>
+            <strong>Owner:</strong>{" "}
+            {service.isOwner ? "You" : service.createdBy.username}
+          </Typography>
+        )}
       </CardContent>
     </Card>
   );

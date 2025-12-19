@@ -40,6 +40,7 @@ class CreateServiceDto
   repoPath?: string;
   cluster?: number | null;
   githubTokenId?: string;
+  visibility?: "private" | "public";
 }
 
 class UpdateServiceDto implements Partial<IPM2Service> {
@@ -55,6 +56,7 @@ class UpdateServiceDto implements Partial<IPM2Service> {
   nodeVersion?: string;
   repoPath?: string;
   cluster?: number | null;
+  visibility?: "private" | "public";
 }
 
 class EnvironmentDto implements Environment {
@@ -76,8 +78,10 @@ export class PM2Controller {
   constructor(private readonly pm2Service: PM2Service) {}
 
   @Get()
-  async getAllServices(): Promise<Service[]> {
-    return this.pm2Service.getServices();
+  async getAllServices(
+    @CurrentUser() user: CurrentUserPayload
+  ): Promise<Service[]> {
+    return this.pm2Service.getServices(user);
   }
 
   @Get("node/versions")
@@ -86,8 +90,11 @@ export class PM2Controller {
   }
 
   @Get(":id")
-  async getService(@Param("id") id: string): Promise<Service> {
-    const service = await this.pm2Service.getService(id);
+  async getService(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("id") id: string
+  ): Promise<Service> {
+    const service = await this.pm2Service.getService(user, id);
     if (!service) {
       throw new HttpException("Service not found", HttpStatus.NOT_FOUND);
     }
@@ -104,10 +111,15 @@ export class PM2Controller {
 
   @Put(":id")
   async updateService(
+    @CurrentUser() user: CurrentUserPayload,
     @Param("id") id: string,
     @Body() updateServiceDto: UpdateServiceDto
   ): Promise<Service> {
-    const service = await this.pm2Service.updateService(id, updateServiceDto);
+    const service = await this.pm2Service.updateService(
+      user,
+      id,
+      updateServiceDto
+    );
     if (!service) {
       throw new HttpException("Service not found", HttpStatus.NOT_FOUND);
     }
@@ -115,8 +127,11 @@ export class PM2Controller {
   }
 
   @Delete(":id")
-  async deleteService(@Param("id") id: string): Promise<{ success: boolean }> {
-    const success = await this.pm2Service.deleteService(id);
+  async deleteService(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("id") id: string
+  ): Promise<{ success: boolean }> {
+    const success = await this.pm2Service.deleteService(user, id);
     if (!success) {
       throw new HttpException("Service not found", HttpStatus.NOT_FOUND);
     }
@@ -124,8 +139,12 @@ export class PM2Controller {
   }
 
   @Post(":id/start")
-  async startService(@Param("id") id: string): Promise<Service> {
+  async startService(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("id") id: string
+  ): Promise<Service> {
     try {
+      await this.pm2Service.checkServicePermission(user, id, "write");
       const service = await this.pm2Service.startService(id);
       if (!service) {
         throw new HttpException("Service not found", HttpStatus.NOT_FOUND);
@@ -134,14 +153,18 @@ export class PM2Controller {
     } catch (error) {
       throw new HttpException(
         error.message || "Failed to start service",
-        HttpStatus.INTERNAL_SERVER_ERROR
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
 
   @Post(":id/stop")
-  async stopService(@Param("id") id: string): Promise<Service> {
+  async stopService(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("id") id: string
+  ): Promise<Service> {
     try {
+      await this.pm2Service.checkServicePermission(user, id, "write");
       const service = await this.pm2Service.stopService(id);
       if (!service) {
         throw new HttpException("Service not found", HttpStatus.NOT_FOUND);
@@ -150,14 +173,18 @@ export class PM2Controller {
     } catch (error) {
       throw new HttpException(
         error.message || "Failed to stop service",
-        HttpStatus.INTERNAL_SERVER_ERROR
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
 
   @Post(":id/restart")
-  async restartService(@Param("id") id: string): Promise<Service> {
+  async restartService(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("id") id: string
+  ): Promise<Service> {
     try {
+      await this.pm2Service.checkServicePermission(user, id, "write");
       const service = await this.pm2Service.restartService(id);
       if (!service) {
         throw new HttpException("Service not found", HttpStatus.NOT_FOUND);
@@ -166,14 +193,18 @@ export class PM2Controller {
     } catch (error) {
       throw new HttpException(
         error.message || "Failed to restart service",
-        HttpStatus.INTERNAL_SERVER_ERROR
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
 
   @Post(":id/reload")
-  async reloadService(@Param("id") id: string): Promise<Service> {
+  async reloadService(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("id") id: string
+  ): Promise<Service> {
     try {
+      await this.pm2Service.checkServicePermission(user, id, "write");
       const service = await this.pm2Service.reloadService(id);
       if (!service) {
         throw new HttpException("Service not found", HttpStatus.NOT_FOUND);
@@ -182,17 +213,19 @@ export class PM2Controller {
     } catch (error) {
       throw new HttpException(
         error.message || "Failed to reload service",
-        HttpStatus.INTERNAL_SERVER_ERROR
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
 
   @Post(":id/environments")
   async addEnvironment(
+    @CurrentUser() user: CurrentUserPayload,
     @Param("id") id: string,
     @Body() environmentDto: EnvironmentDto
   ): Promise<Service> {
     try {
+      await this.pm2Service.checkServicePermission(user, id, "write");
       const service = await this.pm2Service.addEnvironment(id, environmentDto);
       if (!service) {
         throw new HttpException("Service not found", HttpStatus.NOT_FOUND);
@@ -201,18 +234,20 @@ export class PM2Controller {
     } catch (error) {
       throw new HttpException(
         error.message || "Failed to add environment",
-        HttpStatus.INTERNAL_SERVER_ERROR
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
 
   @Put(":id/environments/:name")
   async updateEnvironment(
+    @CurrentUser() user: CurrentUserPayload,
     @Param("id") id: string,
     @Param("name") name: string,
     @Body() updateEnvironmentDto: UpdateEnvironmentDto
   ): Promise<Service> {
     try {
+      await this.pm2Service.checkServicePermission(user, id, "write");
       const service = await this.pm2Service.updateEnvironment(
         id,
         name,
@@ -225,17 +260,19 @@ export class PM2Controller {
     } catch (error) {
       throw new HttpException(
         error.message || "Failed to update environment",
-        HttpStatus.INTERNAL_SERVER_ERROR
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
 
   @Delete(":id/environments/:name")
   async deleteEnvironment(
+    @CurrentUser() user: CurrentUserPayload,
     @Param("id") id: string,
     @Param("name") name: string
   ): Promise<Service> {
     try {
+      await this.pm2Service.checkServicePermission(user, id, "write");
       const service = await this.pm2Service.deleteEnvironment(id, name);
       if (!service) {
         throw new HttpException("Service not found", HttpStatus.NOT_FOUND);
@@ -244,17 +281,19 @@ export class PM2Controller {
     } catch (error) {
       throw new HttpException(
         error.message || "Failed to delete environment",
-        HttpStatus.INTERNAL_SERVER_ERROR
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
 
   @Post(":id/environments/:name/activate")
   async setActiveEnvironment(
+    @CurrentUser() user: CurrentUserPayload,
     @Param("id") id: string,
     @Param("name") name: string
   ): Promise<Service> {
     try {
+      await this.pm2Service.checkServicePermission(user, id, "write");
       const service = await this.pm2Service.setActiveEnvironment(id, name);
       if (!service) {
         throw new HttpException("Service not found", HttpStatus.NOT_FOUND);
@@ -263,7 +302,7 @@ export class PM2Controller {
     } catch (error) {
       throw new HttpException(
         error.message || "Failed to set active environment",
-        HttpStatus.INTERNAL_SERVER_ERROR
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -281,8 +320,12 @@ export class PM2Controller {
   }
 
   @Get(":id/metrics")
-  async getServiceMetrics(@Param("id") id: string) {
+  async getServiceMetrics(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param("id") id: string
+  ) {
     try {
+      await this.pm2Service.checkServicePermission(user, id, "read");
       const metrics = await this.pm2Service.getServiceMetrics(id);
       if (!metrics) {
         throw new HttpException(
@@ -294,23 +337,25 @@ export class PM2Controller {
     } catch (error) {
       throw new HttpException(
         error.message || "Failed to get service metrics",
-        HttpStatus.INTERNAL_SERVER_ERROR
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
 
   @Get(":id/logs")
   async getServiceLogs(
+    @CurrentUser() user: CurrentUserPayload,
     @Param("id") id: string,
     @Query("lines") lines: string = "100"
   ) {
     try {
+      await this.pm2Service.checkServicePermission(user, id, "read");
       const logs = await this.pm2Service.getServiceLogs(id, parseInt(lines));
       return { logs };
     } catch (error) {
       throw new HttpException(
         error.message || "Failed to get service logs",
-        HttpStatus.INTERNAL_SERVER_ERROR
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }

@@ -22,7 +22,12 @@ import { createService } from "../api/services";
 import { getRepositories, getBranches } from "../api/github";
 import { getNodeVersions } from "../api/services";
 import { getGithubTokens, GithubToken } from "../api/githubTokens";
-import { Repository, PM2Service, ServiceStatus } from "@pm2-dashboard/shared";
+import {
+  Repository,
+  PM2Service,
+  ServiceStatus,
+  ServiceVisibility,
+} from "@pm2-dashboard/shared";
 
 interface NewServiceForm {
   name: string;
@@ -40,6 +45,7 @@ interface NewServiceForm {
   useCluster: boolean;
   clusterInstances: number;
   autostart: boolean;
+  visibility: ServiceVisibility;
 }
 
 export default function NewService() {
@@ -61,6 +67,7 @@ export default function NewService() {
       useCluster: false,
       clusterInstances: 1,
       autostart: false,
+      visibility: "private",
     },
   });
 
@@ -114,6 +121,7 @@ export default function NewService() {
         status: ServiceStatus.STOPPED,
         autostart: data.autostart,
         githubTokenId: data.githubTokenId,
+        visibility: data.visibility,
       };
       return createService(serviceData);
     },
@@ -417,6 +425,26 @@ export default function NewService() {
                       }
                       label="Enable autostart on backend startup"
                     />
+                  )}
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Controller
+                  name="visibility"
+                  control={control}
+                  render={({ field }) => (
+                    <FormControl fullWidth>
+                      <InputLabel>Visibility</InputLabel>
+                      <Select {...field} label="Visibility">
+                        <MenuItem value="private">
+                          Private - Only you can access this service
+                        </MenuItem>
+                        <MenuItem value="public">
+                          Public - All users can access and manage this service
+                        </MenuItem>
+                      </Select>
+                    </FormControl>
                   )}
                 />
               </Grid>

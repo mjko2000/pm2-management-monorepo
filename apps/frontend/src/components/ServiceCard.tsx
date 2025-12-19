@@ -24,6 +24,9 @@ import {
   Code as CodeIcon,
   Storage as StorageIcon,
   AutoMode as AutoModeIcon,
+  Public as PublicIcon,
+  Lock as PrivateIcon,
+  Person as PersonIcon,
 } from "@mui/icons-material";
 import { PM2Service, ServiceStatus } from "@pm2-dashboard/shared";
 
@@ -256,6 +259,30 @@ function ServiceCardInfo({ service, theme }: ServiceCardInfoProps) {
           />
           <Typography variant="body2" color="success.main" fontWeight={500}>
             Autostart enabled
+          </Typography>
+        </Box>
+      )}
+
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        {service.visibility === "public" ? (
+          <PublicIcon sx={{ fontSize: 18, color: theme.palette.info.main }} />
+        ) : (
+          <PrivateIcon sx={{ fontSize: 18, color: theme.palette.warning.main }} />
+        )}
+        <Typography
+          variant="body2"
+          color={service.visibility === "public" ? "info.main" : "warning.main"}
+          fontWeight={500}
+        >
+          {service.visibility === "public" ? "Public" : "Private"}
+        </Typography>
+      </Box>
+
+      {service.createdBy && (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <PersonIcon sx={{ fontSize: 18, color: "text.secondary" }} />
+          <Typography variant="body2" color="text.secondary">
+            {service.isOwner ? "You" : service.createdBy.username}
           </Typography>
         </Box>
       )}
