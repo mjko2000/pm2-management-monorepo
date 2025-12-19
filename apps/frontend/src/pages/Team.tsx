@@ -445,7 +445,6 @@ export default function Team() {
               name="password"
               control={control}
               rules={{
-                required: editingUser ? false : "Password is required",
                 minLength: {
                   value: 6,
                   message: "Password must be at least 6 characters",
@@ -454,12 +453,20 @@ export default function Team() {
               render={({ field }) => (
                 <TextField
                   {...field}
-                  label={editingUser ? "New Password (leave empty to keep)" : "Password"}
+                  label={
+                    editingUser
+                      ? "New Password (leave empty to keep)"
+                      : "Password (optional)"
+                  }
                   type={showPassword ? "text" : "password"}
                   fullWidth
                   margin="normal"
                   error={!!errors.password}
-                  helperText={errors.password?.message}
+                  helperText={
+                    errors.password?.message ||
+                    (!editingUser &&
+                      "Leave empty to auto-generate. Password will be sent via email.")
+                  }
                   InputProps={{
                     endAdornment: (
                       <InputAdornment position="end">

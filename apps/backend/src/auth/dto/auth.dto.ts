@@ -37,10 +37,12 @@ export class CreateUserDto {
   @IsEmail()
   email: string;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  @MinLength(6)
-  password: string;
+  @Matches(/^$|.{6,}/, {
+    message: "Password must be empty or at least 6 characters long",
+  })
+  password?: string;
 
   @IsOptional()
   @IsIn(["admin", "user"])
@@ -112,4 +114,3 @@ export interface AuthResponse {
     role: string;
   };
 }
-

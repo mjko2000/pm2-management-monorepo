@@ -9,7 +9,9 @@ import { JwtService } from "@nestjs/jwt";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import * as bcrypt from "bcrypt";
+import * as crypto from "crypto";
 import { User, UserDocument } from "@/schemas/user.schema";
+import { EmailService } from "@/email/email.service";
 import {
   LoginDto,
   CreateUserDto,
@@ -24,11 +26,27 @@ import {
 export class AuthService {
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
-    private jwtService: JwtService
+    private jwtService: JwtService,
+    private emailService: EmailService
   ) {}
 
+  private generateRandomPassword(length: number = 12): string {
+    const chars =
+      "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
+    let password = "";
+    const randomBytes = crypto.randomBytes(length);
+    for (let i = 0; i < length; i++) {
+      password += chars[randomBytes[i] % chars.length];
+    }
+    return password;
+  }
+
   async createUser(createUserDto: CreateUserDto): Promise<UserDocument> {
-    const { username, email, password, role } = createUserDto;
+    const { username, email, role } = createUserDto;
+
+    // Generate random password if not provided
+    const plainPassword =
+      createUserDto.password || this.generateRandomPassword();
 
     // Check if user already exists
     const existingUser = await this.userModel.findOne({
@@ -41,7 +59,7 @@ export class AuthService {
 
     // Hash password
     const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    const hashedPassword = await bcrypt.hash(plainPassword, saltRounds);
 
     // Create user
     const user = new this.userModel({
@@ -52,6 +70,9 @@ export class AuthService {
     });
 
     await user.save();
+
+    // Send welcome email with credentials
+    await this.emailService.sendWelcomeEmail(email, username, plainPassword);
 
     // Return user without password
     const savedUser = await this.userModel

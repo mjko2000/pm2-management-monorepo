@@ -20,6 +20,7 @@ import { LoggerModule } from "./logger/logger.module";
 import { Log, LogSchema } from "./schemas/log.schema";
 import { AuthModule } from "./auth/auth.module";
 import { JwtAuthGuard } from "./auth/guards/jwt-auth.guard";
+import { EmailModule } from "./email/email.module";
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { JwtAuthGuard } from "./auth/guards/jwt-auth.guard";
     EnvironmentModule,
     LoggerModule,
     AuthModule,
+    EmailModule,
   ],
   controllers: [AppController],
   providers: [

@@ -20,7 +20,7 @@ export interface UserProfile {
 export interface CreateUserDto {
   username: string;
   email: string;
-  password: string;
+  password?: string;
   role?: "admin" | "user";
 }
 
