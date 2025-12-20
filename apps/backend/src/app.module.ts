@@ -21,6 +21,7 @@ import { Log, LogSchema } from "./schemas/log.schema";
 import { AuthModule } from "./auth/auth.module";
 import { JwtAuthGuard } from "./auth/guards/jwt-auth.guard";
 import { EmailModule } from "./email/email.module";
+import { DomainModule } from "./domain/domain.module";
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { EmailModule } from "./email/email.module";
     LoggerModule,
     AuthModule,
     EmailModule,
+    DomainModule,
   ],
   controllers: [AppController],
   providers: [

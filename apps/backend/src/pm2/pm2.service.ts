@@ -3,6 +3,8 @@ import {
   NotFoundException,
   OnModuleInit,
   ForbiddenException,
+  Inject,
+  forwardRef,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
@@ -20,6 +22,7 @@ import {
 import * as path from "path";
 import { Service } from "../schemas/service.schema";
 import { CustomLogger } from "../logger/logger.service";
+import { DomainService } from "../domain/domain.service";
 import * as os from "os";
 // Create promisified versions of pm2 functions
 const connect = promisify(pm2.connect.bind(pm2));
@@ -39,7 +42,9 @@ export class PM2Service implements OnModuleInit {
     private githubService: GitHubService,
     @InjectModel(Service.name)
     private serviceModel: Model<Service>,
-    private logger: CustomLogger
+    private logger: CustomLogger,
+    @Inject(forwardRef(() => DomainService))
+    private domainService: DomainService
   ) {
     this.logger.setContext("PM2Service");
     this.nvmDir = path.join(process.env.HOME, ".nvm", "versions", "node");
@@ -266,6 +271,17 @@ export class PM2Service implements OnModuleInit {
         error
       );
       // Don't fail the deletion if repository removal fails
+    }
+
+    // Delete all domains associated with this service
+    try {
+      await this.domainService.deleteDomainsForService(id);
+    } catch (error) {
+      this.logger.error(
+        `Error deleting domains for service ${service.name}:`,
+        error
+      );
+      // Don't fail the deletion if domain removal fails
     }
 
     await this.serviceModel.findByIdAndDelete(id).exec();

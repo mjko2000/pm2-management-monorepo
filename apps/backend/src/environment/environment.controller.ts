@@ -47,12 +47,12 @@ export class EnvironmentController {
     if (!service) {
       throw new HttpException("Service not found", HttpStatus.NOT_FOUND);
     }
-
+    
     const environment = service.environments.find((e) => e.name === name);
     if (!environment) {
       throw new HttpException("Environment not found", HttpStatus.NOT_FOUND);
     }
-
+    
     return environment;
   }
 
@@ -65,14 +65,14 @@ export class EnvironmentController {
     if (!service) {
       throw new HttpException("Service not found", HttpStatus.NOT_FOUND);
     }
-
+    
     if (!service.activeEnvironment) {
       throw new HttpException(
         "No active environment set",
         HttpStatus.NOT_FOUND
       );
     }
-
+    
     return { name: service.activeEnvironment };
   }
-}
+} 
