@@ -7,8 +7,14 @@ import {
   Param,
   HttpCode,
   HttpStatus,
+  Query,
 } from "@nestjs/common";
-import { ApiTags, ApiOperation, ApiBearerAuth } from "@nestjs/swagger";
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiQuery,
+} from "@nestjs/swagger";
 import { DomainService, CreateDomainDto } from "./domain.service";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 
@@ -63,12 +69,19 @@ export class DomainController {
 
   @Post(":id/verify")
   @ApiOperation({ summary: "Verify DNS configuration for a domain" })
+  @ApiQuery({
+    name: "skip",
+    required: false,
+    description: "Skip DNS verification (for Cloudflare/proxy users)",
+  })
   @HttpCode(HttpStatus.OK)
   async verifyDomain(
     @CurrentUser() user: CurrentUserPayload,
-    @Param("id") id: string
+    @Param("id") id: string,
+    @Query("skip") skip?: string
   ) {
-    return this.domainService.verifyDomain(user, id);
+    const skipVerification = skip === "true";
+    return this.domainService.verifyDomain(user, id, skipVerification);
   }
 
   @Post(":id/activate")
@@ -91,4 +104,3 @@ export class DomainController {
     return this.domainService.deleteDomain(user, id);
   }
 }
-

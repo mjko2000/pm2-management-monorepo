@@ -32,6 +32,7 @@ export interface VerifyDomainResponse {
   verified: boolean;
   message: string;
   resolvedIps?: string[];
+  isCloudflare?: boolean;
 }
 
 export interface ActivateDomainResponse {
@@ -61,8 +62,12 @@ export async function createDomain(data: CreateDomainDto): Promise<Domain> {
   return apiPost<Domain>("/domains", data);
 }
 
-export async function verifyDomain(id: string): Promise<VerifyDomainResponse> {
-  return apiPost<VerifyDomainResponse>(`/domains/${id}/verify`);
+export async function verifyDomain(
+  id: string,
+  skip: boolean = false
+): Promise<VerifyDomainResponse> {
+  const query = skip ? "?skip=true" : "";
+  return apiPost<VerifyDomainResponse>(`/domains/${id}/verify${query}`);
 }
 
 export async function activateDomain(

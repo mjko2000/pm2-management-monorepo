@@ -95,15 +95,18 @@ export default function ServiceDomains({ serviceId }: ServiceDomainsProps) {
   );
 
   // Verify domain mutation
-  const verifyMutation = useMutation((id: string) => verifyDomain(id), {
-    onSuccess: (result) => {
-      queryClient.invalidateQueries(["domains", serviceId]);
-      setVerifyResult(result);
-    },
-    onSettled: () => {
-      setProcessingDomainId(null);
-    },
-  });
+  const verifyMutation = useMutation(
+    ({ id, skip }: { id: string; skip: boolean }) => verifyDomain(id, skip),
+    {
+      onSuccess: (result) => {
+        queryClient.invalidateQueries(["domains", serviceId]);
+        setVerifyResult(result);
+      },
+      onSettled: () => {
+        setProcessingDomainId(null);
+      },
+    }
+  );
 
   // Activate domain mutation
   const activateMutation = useMutation((id: string) => activateDomain(id), {
@@ -134,11 +137,11 @@ export default function ServiceDomains({ serviceId }: ServiceDomainsProps) {
     });
   };
 
-  const handleVerifyDomain = (domain: Domain) => {
+  const handleVerifyDomain = (domain: Domain, skip: boolean = false) => {
     setSelectedDomain(domain);
     setProcessingDomainId(domain._id);
     setVerifyResult(null);
-    verifyMutation.mutate(domain._id);
+    verifyMutation.mutate({ id: domain._id, skip });
   };
 
   const handleActivateDomain = (domain: Domain) => {
@@ -267,7 +270,10 @@ export default function ServiceDomains({ serviceId }: ServiceDomainsProps) {
             ))}
           </Box>
         ) : (
-          <Typography color="text.secondary" sx={{ textAlign: "center", py: 2 }}>
+          <Typography
+            color="text.secondary"
+            sx={{ textAlign: "center", py: 2 }}
+          >
             No domains configured. Add a domain to expose this service.
           </Typography>
         )}
@@ -349,14 +355,22 @@ export default function ServiceDomains({ serviceId }: ServiceDomainsProps) {
                 }}
               >
                 <Box
-                  sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    mb: 1,
+                  }}
                 >
                   <Typography variant="body2">
                     <strong>Type:</strong> A
                   </Typography>
                 </Box>
                 <Box
-                  sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    mb: 1,
+                  }}
                 >
                   <Typography variant="body2">
                     <strong>Name:</strong>{" "}
@@ -403,22 +417,42 @@ export default function ServiceDomains({ serviceId }: ServiceDomainsProps) {
               <Typography variant="subtitle2" gutterBottom>
                 Step 3: Verify your DNS configuration
               </Typography>
-              <Button
-                variant="outlined"
-                onClick={() =>
-                  selectedDomain && handleVerifyDomain(selectedDomain)
-                }
-                disabled={verifyMutation.isLoading}
-                startIcon={
-                  verifyMutation.isLoading ? (
-                    <CircularProgress size={16} />
-                  ) : (
-                    <RefreshIcon />
-                  )
-                }
+              <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                <Button
+                  variant="outlined"
+                  onClick={() =>
+                    selectedDomain && handleVerifyDomain(selectedDomain, false)
+                  }
+                  disabled={verifyMutation.isLoading}
+                  startIcon={
+                    verifyMutation.isLoading ? (
+                      <CircularProgress size={16} />
+                    ) : (
+                      <RefreshIcon />
+                    )
+                  }
+                >
+                  Verify DNS
+                </Button>
+                <Button
+                  variant="outlined"
+                  color="warning"
+                  onClick={() =>
+                    selectedDomain && handleVerifyDomain(selectedDomain, true)
+                  }
+                  disabled={verifyMutation.isLoading}
+                >
+                  Skip Verification (Cloudflare/Proxy)
+                </Button>
+              </Box>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ mt: 1, display: "block" }}
               >
-                Verify DNS
-              </Button>
+                Using Cloudflare or another proxy? Click &quot;Skip
+                Verification&quot; to proceed without DNS check.
+              </Typography>
 
               {verifyResult && (
                 <Alert
@@ -431,11 +465,26 @@ export default function ServiceDomains({ serviceId }: ServiceDomainsProps) {
                       Resolved IPs: {verifyResult.resolvedIps.join(", ")}
                     </Typography>
                   )}
+                  {verifyResult.isCloudflare && !verifyResult.verified && (
+                    <Button
+                      size="small"
+                      variant="contained"
+                      color="warning"
+                      sx={{ mt: 1 }}
+                      onClick={() =>
+                        selectedDomain &&
+                        handleVerifyDomain(selectedDomain, true)
+                      }
+                    >
+                      Skip & Verify Anyway
+                    </Button>
+                  )}
                 </Alert>
               )}
             </Box>
 
-            {selectedDomain?.status === "verified" && (
+            {(selectedDomain?.status === "verified" ||
+              verifyResult?.verified) && (
               <>
                 <Divider />
                 <Box>
@@ -484,4 +533,3 @@ export default function ServiceDomains({ serviceId }: ServiceDomainsProps) {
     </Card>
   );
 }
-

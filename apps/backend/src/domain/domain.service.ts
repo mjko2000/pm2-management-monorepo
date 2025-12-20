@@ -141,12 +141,36 @@ export class DomainService {
 
   /**
    * Verify DNS configuration for a domain
+   * @param skipVerification - Skip DNS check (for Cloudflare/proxy users)
    */
   async verifyDomain(
     user: CurrentUserPayload,
-    domainId: string
-  ): Promise<{ verified: boolean; message: string; resolvedIps?: string[] }> {
+    domainId: string,
+    skipVerification: boolean = false
+  ): Promise<{
+    verified: boolean;
+    message: string;
+    resolvedIps?: string[];
+    isCloudflare?: boolean;
+  }> {
     const domain = await this.getDomain(user, domainId);
+
+    // Skip verification mode - for Cloudflare or other proxy users
+    if (skipVerification) {
+      domain.status = "verified";
+      domain.lastCheckedAt = new Date();
+      domain.errorMessage = "";
+      await domain.save();
+
+      this.logger.log(
+        `Domain ${domain.domain} verified (skipped DNS check - Cloudflare/proxy mode)`
+      );
+
+      return {
+        verified: true,
+        message: `Domain ${domain.domain} marked as verified. Make sure your DNS/proxy is correctly configured.`,
+      };
+    }
 
     if (!this.serverIp) {
       throw new BadRequestException(
@@ -159,6 +183,9 @@ export class DomainService {
 
       domain.lastCheckedAt = new Date();
 
+      // Check if it's Cloudflare (common Cloudflare IP ranges)
+      const isCloudflare = this.isCloudflareIp(resolvedIps);
+
       if (resolvedIps.includes(this.serverIp)) {
         domain.status = "verified";
         await domain.save();
@@ -169,6 +196,19 @@ export class DomainService {
           verified: true,
           message: `Domain ${domain.domain} is correctly pointing to ${this.serverIp}`,
           resolvedIps,
+          isCloudflare: false,
+        };
+      } else if (isCloudflare) {
+        // Cloudflare detected - suggest skipping verification
+        domain.status = "pending";
+        domain.errorMessage = "Cloudflare proxy detected";
+        await domain.save();
+
+        return {
+          verified: false,
+          message: `Cloudflare proxy detected. If you're using Cloudflare, click "Skip & Verify" to proceed. Make sure your domain is proxied correctly in Cloudflare dashboard.`,
+          resolvedIps,
+          isCloudflare: true,
         };
       } else {
         domain.status = "pending";
@@ -179,6 +219,7 @@ export class DomainService {
           verified: false,
           message: `Domain points to ${resolvedIps.join(", ")} instead of ${this.serverIp}. Please update your DNS A record.`,
           resolvedIps,
+          isCloudflare: false,
         };
       }
     } catch (error) {
@@ -190,8 +231,54 @@ export class DomainService {
       return {
         verified: false,
         message: `DNS lookup failed. Make sure the domain has an A record pointing to ${this.serverIp}`,
+        isCloudflare: false,
       };
     }
+  }
+
+  /**
+   * Check if IPs belong to Cloudflare
+   */
+  private isCloudflareIp(ips: string[]): boolean {
+    // Common Cloudflare IP prefixes
+    const cloudflareRanges = [
+      "103.21.",
+      "103.22.",
+      "103.31.",
+      "104.16.",
+      "104.17.",
+      "104.18.",
+      "104.19.",
+      "104.20.",
+      "104.21.",
+      "104.22.",
+      "104.23.",
+      "104.24.",
+      "104.25.",
+      "104.26.",
+      "104.27.",
+      "108.162.",
+      "131.0.",
+      "141.101.",
+      "162.158.",
+      "172.64.",
+      "172.65.",
+      "172.66.",
+      "172.67.",
+      "172.68.",
+      "172.69.",
+      "172.70.",
+      "172.71.",
+      "173.245.",
+      "188.114.",
+      "190.93.",
+      "197.234.",
+      "198.41.",
+    ];
+
+    return ips.some((ip) =>
+      cloudflareRanges.some((range) => ip.startsWith(range))
+    );
   }
 
   /**
@@ -448,4 +535,3 @@ export class DomainService {
     }
   }
 }
-
