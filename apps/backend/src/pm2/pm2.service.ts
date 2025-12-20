@@ -52,7 +52,7 @@ export class PM2Service implements OnModuleInit {
 
   async onModuleInit() {
     this.logger.log("PM2Service initialized, starting autostart services...");
-    await this.startAutostartServices();
+    this.startAutostartServices();
   }
 
   async startAutostartServices(): Promise<void> {
