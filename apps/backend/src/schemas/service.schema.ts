@@ -71,6 +71,16 @@ export class Service extends Document {
 
   @Prop({ default: false })
   autostart?: boolean;
+
+  // Webhook CI/CD fields
+  @Prop()
+  deployKey?: string;
+
+  @Prop({ default: false })
+  webhookEnabled?: boolean;
+
+  @Prop()
+  githubWebhookId?: number;
 }
 
 export const ServiceSchema = SchemaFactory.createForClass(Service);

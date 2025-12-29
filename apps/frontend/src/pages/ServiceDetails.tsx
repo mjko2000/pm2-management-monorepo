@@ -24,6 +24,7 @@ import ServiceActions from "../components/ServiceActions";
 import ServiceInformation from "../components/ServiceInformation";
 import ServiceEnvironments from "../components/ServiceEnvironments";
 import ServiceDomains from "../components/ServiceDomains";
+import ServiceWebhook from "../components/ServiceWebhook";
 import Notifications from "../components/Notifications";
 import ConfirmationDialog from "../components/ConfirmationDialog";
 
@@ -293,6 +294,10 @@ export default function ServiceDetails() {
             onDeleteEnvironment={handleDeleteEnvironment}
             onSetActiveEnvironment={handleSetActiveEnvironment}
           />
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <ServiceWebhook serviceId={serviceId} />
         </Grid>
 
         <Grid item xs={12}>
