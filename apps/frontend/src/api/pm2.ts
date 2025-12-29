@@ -1,5 +1,5 @@
 import { SystemMetrics } from "@pm2-dashboard/shared";
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
+import { apiGet } from "./client";
 
 export interface ProcessInfo {
   pid: number;
@@ -20,19 +20,11 @@ export interface ServiceMetrics {
 }
 
 export const getSystemMetrics = async (): Promise<SystemMetrics> => {
-  const response = await fetch(`${API_URL}/services/metrics/system`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch system metrics");
-  }
-  return response.json();
+  return apiGet<SystemMetrics>("/services/metrics/system");
 };
 
 export const getServiceMetrics = async (
   serviceId: string
 ): Promise<ServiceMetrics> => {
-  const response = await fetch(`${API_URL}/services/${serviceId}/metrics`);
-  if (!response.ok) {
-    throw new Error("Failed to fetch service metrics");
-  }
-  return response.json();
+  return apiGet<ServiceMetrics>(`/services/${serviceId}/metrics`);
 };

@@ -6,9 +6,14 @@ import Layout from "./components/Layout";
 import Services from "./pages/Services";
 import ServiceDetails from "./pages/ServiceDetails";
 import NewService from "./pages/NewService";
-import Settings from "./pages/Settings";
 import Dashboard from "./pages/Dashboard";
 import { Logs } from "./pages/Logs";
+import Team from "./pages/Team";
+import Profile from "./pages/Profile";
+import GithubTokens from "./pages/GithubTokens";
+import Login from "./pages/Login";
+import { AuthProvider } from "./contexts/AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -17,17 +22,31 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
+        <AuthProvider>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route
+              path="/*"
+              element={
+                <ProtectedRoute>
         <Layout>
           <Routes>
             <Route index path="/" element={<Navigate to="/dashboard" />} />
-            <Route index path="/dashboard" element={<Dashboard />} />
+                      <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/services" element={<Services />} />
             <Route path="/services/new" element={<NewService />} />
             <Route path="/services/:id" element={<ServiceDetails />} />
             <Route path="/logs" element={<Logs />} />
-            <Route path="/settings" element={<Settings />} />
+                      <Route path="/github-tokens" element={<GithubTokens />} />
+                      <Route path="/team" element={<Team />} />
+                      <Route path="/profile" element={<Profile />} />
+                    </Routes>
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
           </Routes>
-        </Layout>
+        </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

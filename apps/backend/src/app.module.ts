@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { MongooseModule } from "@nestjs/mongoose";
+import { APP_GUARD } from "@nestjs/core";
 import { GitHubModule } from "./github/github.module";
 import { PM2Module } from "./pm2/pm2.module";
 import { EnvironmentModule } from "./environment/environment.module";
@@ -17,6 +18,10 @@ import { PM2Service } from "./pm2/pm2.service";
 import { GitHubService } from "./github/github.service";
 import { LoggerModule } from "./logger/logger.module";
 import { Log, LogSchema } from "./schemas/log.schema";
+import { AuthModule } from "./auth/auth.module";
+import { JwtAuthGuard } from "./auth/guards/jwt-auth.guard";
+import { EmailModule } from "./email/email.module";
+import { DomainModule } from "./domain/domain.module";
 
 @Module({
   imports: [
@@ -39,8 +44,20 @@ import { Log, LogSchema } from "./schemas/log.schema";
     PM2Module,
     EnvironmentModule,
     LoggerModule,
+    AuthModule,
+    EmailModule,
+    DomainModule,
   ],
   controllers: [AppController],
-  providers: [AppService, PM2Service, GitHubService, AppConfigService],
+  providers: [
+    AppService,
+    PM2Service,
+    GitHubService,
+    AppConfigService,
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
+  ],
 })
 export class AppModule {}

@@ -1,9 +1,13 @@
 import { Controller, Get, Delete, Query, UseGuards } from "@nestjs/common";
+import { ApiBearerAuth } from "@nestjs/swagger";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import { Log } from "../schemas/log.schema";
 import { CustomLogger } from "./logger.service";
+import { JwtAuthGuard } from "@/auth/guards/jwt-auth.guard";
 
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller("logs")
 export class LoggerController {
   constructor(

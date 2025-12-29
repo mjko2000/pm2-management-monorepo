@@ -17,6 +17,7 @@ async function bootstrap() {
     .setTitle("PM2 Dashboard API")
     .setDescription("API for managing PM2 services")
     .setVersion("1.0")
+    .addBearerAuth()
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

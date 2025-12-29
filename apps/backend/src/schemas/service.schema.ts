@@ -1,6 +1,10 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
-import { Document } from "mongoose";
-import { Environment, ServiceStatus } from "@pm2-dashboard/shared";
+import { Document, Types } from "mongoose";
+import {
+  Environment,
+  ServiceStatus,
+  ServiceVisibility,
+} from "@pm2-dashboard/shared";
 
 @Schema()
 export class Service extends Document {
@@ -12,6 +16,15 @@ export class Service extends Document {
 
   @Prop({ required: true })
   branch: string;
+
+  @Prop({ type: Types.ObjectId, ref: "GithubToken" })
+  githubTokenId?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: "User" })
+  createdBy?: Types.ObjectId;
+
+  @Prop({ required: true, enum: ["private", "public"], default: "private" })
+  visibility: ServiceVisibility;
 
   @Prop()
   sourceDirectory?: string;

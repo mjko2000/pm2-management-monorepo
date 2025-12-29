@@ -1,6 +1,14 @@
-import { Injectable, NotFoundException, OnModuleInit } from "@nestjs/common";
+import {
+  Injectable,
+  NotFoundException,
+  OnModuleInit,
+  ForbiddenException,
+  Inject,
+  forwardRef,
+} from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { Model } from "mongoose";
+import { Model, Types } from "mongoose";
+import { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import * as pm2 from "pm2";
 import { promisify } from "util";
 import { ConfigService } from "../config/config.service";
@@ -14,6 +22,7 @@ import {
 import * as path from "path";
 import { Service } from "../schemas/service.schema";
 import { CustomLogger } from "../logger/logger.service";
+import { DomainService } from "../domain/domain.service";
 import * as os from "os";
 // Create promisified versions of pm2 functions
 const connect = promisify(pm2.connect.bind(pm2));
@@ -33,7 +42,9 @@ export class PM2Service implements OnModuleInit {
     private githubService: GitHubService,
     @InjectModel(Service.name)
     private serviceModel: Model<Service>,
-    private logger: CustomLogger
+    private logger: CustomLogger,
+    @Inject(forwardRef(() => DomainService))
+    private domainService: DomainService
   ) {
     this.logger.setContext("PM2Service");
     this.nvmDir = path.join(process.env.HOME, ".nvm", "versions", "node");
@@ -41,7 +52,7 @@ export class PM2Service implements OnModuleInit {
 
   async onModuleInit() {
     this.logger.log("PM2Service initialized, starting autostart services...");
-    await this.startAutostartServices();
+    this.startAutostartServices();
   }
 
   async startAutostartServices(): Promise<void> {
@@ -77,13 +88,69 @@ export class PM2Service implements OnModuleInit {
     }
   }
 
-  async getServices(): Promise<Service[]> {
-    const services = await this.serviceModel.find().exec();
+  async getServices(user: CurrentUserPayload): Promise<any[]> {
+    let query: any;
+
+    if (user.role === "admin") {
+      // Admin sees all services
+      query = {};
+    } else {
+      // Regular users see their own services + public services
+      query = {
+        $or: [
+          { createdBy: new Types.ObjectId(user.userId) },
+          { visibility: "public" },
+        ],
+      };
+    }
+
+    const services = await this.serviceModel
+      .find(query)
+      .populate("createdBy", "_id username")
+      .exec();
+
     await this.updateServicesStatus(services);
-    return services;
+
+    // Add isOwner field for frontend
+    return services.map((service) => {
+      const serviceObj = service.toObject();
+      return {
+        ...serviceObj,
+        isOwner: serviceObj.createdBy?._id?.toString() === user.userId,
+      };
+    });
   }
 
-  async getService(id: string): Promise<Service | undefined> {
+  async getService(
+    user: CurrentUserPayload,
+    id: string
+  ): Promise<any | undefined> {
+    const service = await this.serviceModel
+      .findById(id)
+      .populate("createdBy", "_id username")
+      .exec();
+
+    if (!service) {
+      return undefined;
+    }
+
+    // Check access permission
+    const isOwner = service.createdBy?._id?.toString() === user.userId;
+    const isPublic = service.visibility === "public";
+    const isAdmin = user.role === "admin";
+
+    if (!isOwner && !isPublic && !isAdmin) {
+      throw new ForbiddenException("You do not have access to this service");
+    }
+
+    const serviceObj = service.toObject();
+    return {
+      ...serviceObj,
+      isOwner,
+    };
+  }
+
+  async getServiceById(id: string): Promise<Service | undefined> {
     const service = await this.serviceModel.findById(id).exec();
     if (service) {
       await this.updateServicesStatus([service]);
@@ -91,25 +158,97 @@ export class PM2Service implements OnModuleInit {
     return service;
   }
 
-  async createService(serviceData: Omit<IPM2Service, "_id">): Promise<Service> {
-    const newService = await this.serviceModel.create(serviceData);
+  async checkServicePermission(
+    user: CurrentUserPayload,
+    serviceId: string,
+    operation: "read" | "write"
+  ): Promise<Service> {
+    const service = await this.serviceModel.findById(serviceId).exec();
+
+    if (!service) {
+      throw new NotFoundException(`Service ${serviceId} not found`);
+    }
+
+    const isOwner = service.createdBy?.toString() === user.userId;
+    const isPublic = service.visibility === "public";
+    const isAdmin = user.role === "admin";
+
+    if (operation === "read") {
+      // Read access: owner, public, or admin
+      if (!isOwner && !isPublic && !isAdmin) {
+        throw new ForbiddenException("You do not have access to this service");
+      }
+    } else {
+      // Write access: owner, public, or admin
+      if (!isOwner && !isPublic && !isAdmin) {
+        throw new ForbiddenException(
+          "You do not have permission to modify this service"
+        );
+      }
+    }
+
+    return service;
+  }
+
+  async createService(
+    serviceData: Omit<IPM2Service, "_id"> & {
+      githubTokenId?: string;
+      visibility?: string;
+    },
+    userId: string
+  ): Promise<Service> {
+    const newService = await this.serviceModel.create({
+      ...serviceData,
+      createdBy: userId,
+      visibility: serviceData.visibility || "private",
+    });
     return newService;
   }
 
   async updateService(
+    user: CurrentUserPayload,
     id: string,
-    serviceData: Partial<IPM2Service>
+    serviceData: Partial<IPM2Service> & { githubTokenId?: string }
   ): Promise<Service | undefined> {
-    const service = await this.serviceModel
+    const service = await this.serviceModel.findById(id).exec();
+
+    if (!service) {
+      return undefined;
+    }
+
+    // Check permission - only owner or admin can update
+    const isOwner = service.createdBy?.toString() === user.userId;
+    const isPublic = service.visibility === "public";
+    const isAdmin = user.role === "admin";
+
+    if (!isOwner && !isPublic && !isAdmin) {
+      throw new ForbiddenException(
+        "You do not have permission to update this service"
+      );
+    }
+
+    const updatedService = await this.serviceModel
       .findByIdAndUpdate(id, { $set: serviceData }, { new: true })
+      .populate("createdBy", "_id username")
       .exec();
-    return service;
+    return updatedService;
   }
 
-  async deleteService(id: string): Promise<boolean> {
+  async deleteService(user: CurrentUserPayload, id: string): Promise<boolean> {
     const service = await this.serviceModel.findById(id).exec();
+
     if (!service) {
       return false;
+    }
+
+    // Check permission - only owner or admin can delete
+    const isOwner = service.createdBy?.toString() === user.userId;
+    const isAdmin = user.role === "admin";
+
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException(
+        "You do not have permission to delete this service"
+      );
     }
 
     // Stop and delete service if running
@@ -132,6 +271,17 @@ export class PM2Service implements OnModuleInit {
         error
       );
       // Don't fail the deletion if repository removal fails
+    }
+
+    // Delete all domains associated with this service
+    try {
+      await this.domainService.deleteDomainsForService(id);
+    } catch (error) {
+      this.logger.error(
+        `Error deleting domains for service ${service.name}:`,
+        error
+      );
+      // Don't fail the deletion if domain removal fails
     }
 
     await this.serviceModel.findByIdAndDelete(id).exec();
@@ -205,10 +355,17 @@ export class PM2Service implements OnModuleInit {
       await service.save();
 
       // Ensure repository is available (clone if not exists, pull if exists)
+      if (!service.githubTokenId || !service.createdBy) {
+        throw new Error(
+          "Service must have a GitHub token and creator assigned"
+        );
+      }
       const repoPath = await this.ensureRepositoryAvailable(
         service.repositoryUrl,
         service.branch,
         service.name,
+        service.githubTokenId.toString(),
+        service.createdBy.toString(),
         service.repoPath
       );
 
@@ -319,10 +476,17 @@ export class PM2Service implements OnModuleInit {
       }
 
       // Pull latest changes from repository
+      if (!service.githubTokenId || !service.createdBy) {
+        throw new Error(
+          "Service must have a GitHub token and creator assigned"
+        );
+      }
       const repoPath = await this.pullLatestChanges(
         service.repositoryUrl,
         service.branch,
         service.name,
+        service.githubTokenId.toString(),
+        service.createdBy.toString(),
         service.repoPath
       );
 
@@ -367,6 +531,8 @@ export class PM2Service implements OnModuleInit {
     repoUrl: string,
     branch: string,
     serviceName: string,
+    tokenId: string,
+    userId: string,
     existingRepoPath?: string
   ): Promise<string> {
     const repoPath =
@@ -378,12 +544,23 @@ export class PM2Service implements OnModuleInit {
       this.logger.log(
         `Repository already exists at ${repoPath}, pulling latest changes...`
       );
-      return this.githubService.pullRepository(repoPath, branch);
+      return this.githubService.pullRepositoryWithTokenId(
+        repoPath,
+        branch,
+        tokenId,
+        userId
+      );
     } else {
       this.logger.log(
         `Repository not found at ${repoPath}, cloning from ${repoUrl}...`
       );
-      return this.githubService.cloneRepository(repoUrl, branch, serviceName);
+      return this.githubService.cloneRepository(
+        repoUrl,
+        branch,
+        tokenId,
+        userId,
+        serviceName
+      );
     }
   }
 
@@ -391,6 +568,8 @@ export class PM2Service implements OnModuleInit {
     repoUrl: string,
     branch: string,
     serviceName: string,
+    tokenId: string,
+    userId: string,
     existingRepoPath?: string
   ): Promise<string> {
     const repoPath =
@@ -403,7 +582,12 @@ export class PM2Service implements OnModuleInit {
       );
     }
 
-    return this.githubService.pullRepository(repoPath, branch);
+    return this.githubService.pullRepositoryWithTokenId(
+      repoPath,
+      branch,
+      tokenId,
+      userId
+    );
   }
 
   private async generateRepositoryPath(

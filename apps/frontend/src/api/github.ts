@@ -1,52 +1,15 @@
 import { Repository } from "@pm2-dashboard/shared";
+import { apiGet } from "./client";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
-
-export async function getRepositories(): Promise<Repository[]> {
-  const response = await fetch(`${API_URL}/github/repositories`);
-
-  if (!response.ok) {
-    throw new Error("Failed to fetch repositories");
-  }
-
-  return response.json();
+export async function getRepositories(tokenId: string): Promise<Repository[]> {
+  return apiGet<Repository[]>(`/github/repositories?tokenId=${tokenId}`);
 }
 
-export async function getBranches(repoUrl: string): Promise<string[]> {
-  const response = await fetch(
-    `${API_URL}/github/branches?repoUrl=${encodeURIComponent(repoUrl)}`
+export async function getBranches(
+  repoUrl: string,
+  tokenId: string
+): Promise<string[]> {
+  return apiGet<string[]>(
+    `/github/branches?repoUrl=${encodeURIComponent(repoUrl)}&tokenId=${tokenId}`
   );
-
-  if (!response.ok) {
-    throw new Error("Failed to fetch branches");
-  }
-
-  return response.json();
-}
-
-export async function setGitHubToken(
-  token: string,
-  username?: string
-): Promise<void> {
-  const response = await fetch(`${API_URL}/github/token`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ token, username }),
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to set GitHub token");
-  }
-}
-
-export async function validateGitHubToken(): Promise<boolean> {
-  const response = await fetch(`${API_URL}/github/token/validate`);
-
-  if (!response.ok) {
-    return false;
-  }
-
-  return response.json();
 }

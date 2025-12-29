@@ -1,3 +1,5 @@
+export type ServiceVisibility = "private" | "public";
+
 export interface PM2Service {
   id: string;
   name: string;
@@ -14,10 +16,17 @@ export interface PM2Service {
   status: "online" | "stopped" | "errored";
   pm2Id?: string;
   autostart?: boolean;
+  visibility?: ServiceVisibility;
+  createdBy?: string;
 }
 
 export interface Environment {
   name: string;
   description?: string;
   variables: Record<string, string>;
+}
+
+export interface ServiceOwner {
+  _id: string;
+  username: string;
 }
