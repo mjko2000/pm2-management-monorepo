@@ -68,6 +68,15 @@ A modern, feature-rich web-based dashboard for managing PM2 processes with GitHu
 - **Service Status Tracking**: Monitor online, stopped, building, and error states
 - **Beautiful Dark Theme**: Modern, responsive UI with glassmorphism effects
 
+### 🌐 Domain Management & SSL
+
+- **Custom Domains**: Attach custom domains to your services
+- **Nginx Integration**: Automatic Nginx reverse proxy configuration
+- **SSL Certificates**: Automatic SSL certificate provisioning via Certbot (Let's Encrypt)
+- **DNS Verification**: Built-in DNS verification with Cloudflare proxy detection
+- **Domain Lifecycle**: Full domain management (create, verify, activate, delete)
+- **Auto-cleanup**: Domains and Nginx configs are automatically removed when services are deleted
+
 ### 📝 Logging & Debugging
 
 - **Service Logs**: View real-time logs for individual services
@@ -134,6 +143,8 @@ The application will be available at:
 | NVM      | Latest  | Node version management |
 | Git      | Latest  | Version control         |
 | MongoDB  | v6.0+   | Database                |
+| Nginx    | Latest  | Reverse proxy (domains) |
+| Certbot  | Latest  | SSL certificates        |
 
 ### Installation Commands
 
@@ -160,6 +171,13 @@ wget -qO - https://www.mongodb.org/static/pgp/server-6.0.asc | sudo apt-key add 
 echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
 sudo apt-get update
 sudo apt-get install -y mongodb-org
+
+# Install Nginx
+sudo apt-get install -y nginx
+sudo systemctl enable nginx
+
+# Install Certbot
+sudo apt-get install -y certbot python3-certbot-nginx
 ```
 
 </details>
@@ -184,6 +202,13 @@ npm install -g pm2
 # Install MongoDB
 brew tap mongodb/brew
 brew install mongodb-community
+
+# Install Nginx
+brew install nginx
+brew services start nginx
+
+# Install Certbot
+brew install certbot
 ```
 
 </details>
@@ -220,6 +245,9 @@ SMTP_PASS=your-app-password
 SMTP_FROM="PM2 Dashboard" <noreply@example.com>
 APP_NAME=PM2 Dashboard
 APP_URL=http://localhost:5173
+
+# Domain Management (for Nginx/SSL)
+SERVER_IP=your.server.ip.address
 ```
 
 ### Frontend Environment Variables
@@ -256,6 +284,41 @@ export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
 ```
+
+### Nginx & Certbot Sudoers Setup
+
+The PM2 Dashboard backend needs permission to run Nginx and Certbot commands. Configure sudoers for the user running the backend:
+
+```bash
+# Create sudoers file for PM2 Dashboard
+sudo visudo -f /etc/sudoers.d/pm2-dashboard
+```
+
+Add the following content (replace `youruser` with your actual username):
+
+```
+# PM2 Dashboard - Nginx commands
+youruser ALL=(ALL) NOPASSWD: /usr/sbin/nginx -t
+youruser ALL=(ALL) NOPASSWD: /usr/bin/systemctl reload nginx
+youruser ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/nginx/sites-available/*
+youruser ALL=(ALL) NOPASSWD: /usr/bin/ln -sf /etc/nginx/sites-available/* /etc/nginx/sites-enabled/*
+youruser ALL=(ALL) NOPASSWD: /usr/bin/rm /etc/nginx/sites-available/*
+youruser ALL=(ALL) NOPASSWD: /usr/bin/rm /etc/nginx/sites-enabled/*
+
+# PM2 Dashboard - Certbot commands
+youruser ALL=(ALL) NOPASSWD: /usr/bin/certbot --nginx -d * --non-interactive --agree-tos -m *
+youruser ALL=(ALL) NOPASSWD: /usr/bin/certbot delete --cert-name * --non-interactive
+```
+
+Verify the configuration:
+
+```bash
+# Test sudo permissions
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+**Security Note**: Only grant these specific permissions. Never run the Node.js application as root.
 
 ---
 
@@ -331,6 +394,65 @@ export NVM_DIR="$HOME/.nvm"
 - **Public Services**: All authenticated users can view and manage
 - **Admin Access**: Admins can see and manage all services (private and public)
 
+### Managing Custom Domains
+
+The PM2 Dashboard allows you to attach custom domains to your services with automatic SSL certificates.
+
+#### Adding a Domain
+
+1. Open a **service details** page
+2. Navigate to the **Domains** section
+3. Click **"Add Domain"**
+4. Enter:
+   - **Domain**: Your domain name (e.g., `api.example.com`)
+   - **Port**: The internal port your service listens on
+5. Click **"Add"**
+
+#### Configuring DNS
+
+After adding a domain, you'll see a DNS configuration guide:
+
+1. Go to your **DNS provider** (Cloudflare, Namecheap, Route53, etc.)
+2. Add an **A record**:
+   - **Type**: A
+   - **Name**: Your subdomain (e.g., `api`) or `@` for root
+   - **Value**: Your server IP (shown in the guide)
+   - **TTL**: Auto or 300
+3. Wait for DNS propagation (5-15 minutes)
+
+#### Verifying DNS
+
+1. Click **"Verify DNS"** to check if your domain points to the server
+2. If using **Cloudflare** (proxy enabled), click **"Skip Verification"** instead
+   - Cloudflare proxies traffic through their servers, so DNS verification won't work normally
+   - Make sure your Cloudflare SSL mode is set to "Full" or "Full (Strict)"
+
+#### Activating Domain (SSL)
+
+Once verified:
+
+1. Click **"Activate Domain with SSL"**
+2. The system will:
+   - Create Nginx reverse proxy configuration
+   - Obtain SSL certificate via Certbot (Let's Encrypt)
+   - Enable HTTPS for your domain
+3. Your domain is now active with SSL! 🎉
+
+#### Domain Status
+
+| Status       | Description                                |
+| ------------ | ------------------------------------------ |
+| **Pending**  | Domain added, awaiting DNS verification    |
+| **Verified** | DNS verified, ready for activation         |
+| **Active**   | Domain is live with Nginx config and SSL   |
+| **Error**    | Something went wrong (check error message) |
+
+#### Deleting Domains
+
+- Domains can be deleted individually from the service details page
+- When a **service is deleted**, all associated domains and Nginx configs are automatically removed
+- SSL certificates are also cleaned up via Certbot
+
 ---
 
 ## 🏗️ Architecture
@@ -341,6 +463,7 @@ pm2-dashboard/
 │   ├── backend/              # NestJS API server
 │   │   ├── src/
 │   │   │   ├── auth/         # Authentication & authorization
+│   │   │   ├── domain/       # Domain management (Nginx/SSL)
 │   │   │   ├── email/        # Email service (nodemailer)
 │   │   │   ├── github/       # GitHub integration
 │   │   │   ├── pm2/          # PM2 service management
@@ -461,6 +584,19 @@ pm2-dashboard/
 | `PUT`    | `/services/:id/environments/:name`          | Update environment     |
 | `DELETE` | `/services/:id/environments/:name`          | Delete environment     |
 | `POST`   | `/services/:id/environments/:name/activate` | Set active environment |
+
+### Domains
+
+| Method   | Endpoint                        | Description                              |
+| -------- | ------------------------------- | ---------------------------------------- |
+| `GET`    | `/domains/server-ip`            | Get server IP for DNS configuration      |
+| `GET`    | `/domains/service/:serviceId`   | List domains for a service               |
+| `GET`    | `/domains/:id`                  | Get domain details                       |
+| `POST`   | `/domains`                      | Create new domain                        |
+| `POST`   | `/domains/:id/verify`           | Verify DNS configuration                 |
+| `POST`   | `/domains/:id/verify?skip=true` | Skip DNS verification (Cloudflare/proxy) |
+| `POST`   | `/domains/:id/activate`         | Activate domain (create Nginx + SSL)     |
+| `DELETE` | `/domains/:id`                  | Delete domain and cleanup Nginx/SSL      |
 
 **Note**: All endpoints except `/auth/login` require JWT authentication via Bearer token.
 
@@ -640,6 +776,93 @@ pm2 logs
 - Ensure working directory has write permissions
 </details>
 
+<details>
+<summary><b>Domain/Nginx Issues</b></summary>
+
+```bash
+# Check Nginx status
+sudo systemctl status nginx
+
+# Test Nginx configuration
+sudo nginx -t
+
+# View Nginx error logs
+sudo tail -f /var/log/nginx/error.log
+
+# List active Nginx sites
+ls -la /etc/nginx/sites-enabled/
+
+# Check if domain config exists
+cat /etc/nginx/sites-available/yourdomain.com.conf
+
+# Manually reload Nginx
+sudo systemctl reload nginx
+```
+
+</details>
+
+<details>
+<summary><b>SSL Certificate Issues</b></summary>
+
+```bash
+# List all certificates
+sudo certbot certificates
+
+# Test certificate renewal
+sudo certbot renew --dry-run
+
+# Manually renew a certificate
+sudo certbot renew --cert-name yourdomain.com
+
+# Delete a certificate
+sudo certbot delete --cert-name yourdomain.com
+
+# View Certbot logs
+sudo tail -f /var/log/letsencrypt/letsencrypt.log
+```
+
+**Common SSL Issues:**
+
+- Domain not pointing to server IP
+- Port 80 blocked by firewall
+- Rate limit exceeded (5 certificates per domain per week)
+- Wildcard domains require DNS validation
+
+</details>
+
+<details>
+<summary><b>Cloudflare Proxy Issues</b></summary>
+
+When using Cloudflare with proxy enabled (orange cloud):
+
+1. **DNS Verification fails**: Use "Skip Verification" button
+2. **SSL Errors**: Set Cloudflare SSL mode to "Full" or "Full (Strict)"
+3. **Mixed Content**: Ensure your app serves all resources over HTTPS
+4. **Origin Certificate**: Consider using Cloudflare Origin Certificates for enhanced security
+
+</details>
+
+<details>
+<summary><b>Sudoers Permission Denied</b></summary>
+
+If domain operations fail with permission errors:
+
+```bash
+# Verify sudoers file syntax
+sudo visudo -c -f /etc/sudoers.d/pm2-dashboard
+
+# Check current user
+whoami
+
+# Test sudo permissions
+sudo -l
+
+# Ensure file has correct permissions
+sudo chmod 440 /etc/sudoers.d/pm2-dashboard
+```
+
+</details>
+
 ---
 
 ## 📸 Screenshots
@@ -695,6 +918,9 @@ For issues and questions:
 
 ## 🎯 Roadmap
 
+- [x] Custom domain management with Nginx
+- [x] Automatic SSL certificates (Let's Encrypt)
+- [x] Cloudflare proxy support
 - [ ] WebSocket support for real-time updates
 - [ ] Docker containerization
 - [ ] Kubernetes integration
@@ -710,7 +936,7 @@ For issues and questions:
 
 <div align="center">
 
-**Made with ❤️ by the PM2 Dashboard Team**
+**Made with ❤️ by the Ndeva**
 
 ⭐ Star us on GitHub if you find this project useful!
 
