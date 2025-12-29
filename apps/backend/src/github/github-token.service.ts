@@ -137,6 +137,7 @@ export class GithubTokenService {
     userId: string
   ): GithubTokenResponse {
     const createdBy = token.createdBy as any;
+    console.log(token);
     return {
       _id: token._id.toString(),
       name: token.name,
@@ -146,7 +147,7 @@ export class GithubTokenService {
         username: createdBy.username || "Unknown",
       },
       isActive: token.isActive,
-      isOwner: token.createdBy.toString() === userId,
+      isOwner: token.createdBy._id?.toString() === userId,
       createdAt: (token as any).createdAt,
       updatedAt: (token as any).updatedAt,
       lastUsedAt: token.lastUsedAt?.toISOString(),
