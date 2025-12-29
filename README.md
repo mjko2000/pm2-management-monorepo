@@ -936,7 +936,7 @@ For issues and questions:
 
 <div align="center">
 
-**Made with ❤️ by the PM2 Dashboard Team**
+**Made with ❤️ by the Ndeva**
 
 ⭐ Star us on GitHub if you find this project useful!
 
