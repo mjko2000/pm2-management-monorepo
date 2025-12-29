@@ -172,13 +172,7 @@ export class GitHubService {
     const octokit = this.createOctokit(tokenValue);
 
     try {
-      // Extract owner and repo from full GitHub URL
-      const match = repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
-      if (!match) {
-        throw new Error("Invalid GitHub repository URL");
-      }
-
-      const [, owner, repo] = match;
+      const { owner, repo } = this.extractOwnerAndRepo(repoUrl);
       const { data: branches } = await octokit.repos.listBranches({
         owner,
         repo,
@@ -190,6 +184,91 @@ export class GitHubService {
       console.error("Error fetching branches:", error);
       throw new Error(`Failed to fetch branches for repository ${repoUrl}`);
     }
+  }
+
+  async createWebhook(
+    repoUrl: string,
+    tokenId: string,
+    userId: string,
+    webhookUrl: string
+  ): Promise<number> {
+    const tokenValue = await this.githubTokenService.getTokenValue(
+      tokenId,
+      userId
+    );
+    const octokit = this.createOctokit(tokenValue);
+
+    try {
+      const { owner, repo } = this.extractOwnerAndRepo(repoUrl);
+      const { data: webhook } = await octokit.repos.createWebhook({
+        owner,
+        repo,
+        config: {
+          url: webhookUrl,
+          content_type: "json",
+        },
+        events: ["push"],
+        active: true,
+      });
+
+      return webhook.id;
+    } catch (error) {
+      console.error("Error creating webhook:", error);
+      if (error.status === 422) {
+        throw new Error(
+          "Webhook already exists for this URL or validation failed"
+        );
+      }
+      if (error.status === 404) {
+        throw new Error(
+          "Repository not found or token lacks webhook permissions"
+        );
+      }
+      throw new Error(`Failed to create webhook: ${error.message}`);
+    }
+  }
+
+  async deleteWebhook(
+    repoUrl: string,
+    tokenId: string,
+    userId: string,
+    hookId: number
+  ): Promise<void> {
+    const tokenValue = await this.githubTokenService.getTokenValue(
+      tokenId,
+      userId
+    );
+    const octokit = this.createOctokit(tokenValue);
+
+    try {
+      const { owner, repo } = this.extractOwnerAndRepo(repoUrl);
+      await octokit.repos.deleteWebhook({
+        owner,
+        repo,
+        hook_id: hookId,
+      });
+    } catch (error) {
+      console.error("Error deleting webhook:", error);
+      if (error.status === 404) {
+        // Webhook already deleted, ignore
+        return;
+      }
+      throw new Error(`Failed to delete webhook: ${error.message}`);
+    }
+  }
+
+  private extractOwnerAndRepo(repoUrl: string): {
+    owner: string;
+    repo: string;
+  } {
+    const match = repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+    if (!match) {
+      throw new Error("Invalid GitHub repository URL");
+    }
+    const [, owner, repoName] = match;
+    // Remove .git suffix if present
+    const repo = repoName.replace(/\.git$/, "");
+    return { owner, repo };
   }
 
   private createSlug(serviceName: string): string {

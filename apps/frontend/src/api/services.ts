@@ -96,3 +96,27 @@ export const getServiceLogs = async (
 export const getNodeVersions = async (): Promise<string[]> => {
   return apiGet<string[]>("/services/node/versions");
 };
+
+// Webhook API
+export interface WebhookStatus {
+  enabled: boolean;
+  webhookUrl: string | null;
+}
+
+export const getWebhookStatus = async (
+  serviceId: string
+): Promise<WebhookStatus> => {
+  return apiGet<WebhookStatus>(`/services/${serviceId}/webhook/status`);
+};
+
+export const enableWebhook = async (
+  serviceId: string
+): Promise<{ success: boolean; message: string; webhookEnabled: boolean }> => {
+  return apiPost(`/services/${serviceId}/webhook/enable`);
+};
+
+export const disableWebhook = async (
+  serviceId: string
+): Promise<{ success: boolean; message: string; webhookEnabled: boolean }> => {
+  return apiDelete(`/services/${serviceId}/webhook/disable`);
+};

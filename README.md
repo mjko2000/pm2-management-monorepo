@@ -52,6 +52,14 @@ A modern, feature-rich web-based dashboard for managing PM2 processes with GitHu
 - **Automatic Dependency Management**: Automatic npm install and build processes
 - **Branch Management**: Easy branch selection and switching
 
+### 🔄 CI/CD & Webhooks
+
+- **GitHub Webhooks**: Automatic webhook creation via GitHub API
+- **Auto-Deploy on Push**: Push to configured branch triggers automatic deployment
+- **Zero-Configuration**: Enable with one click - no manual GitHub setup required
+- **Deploy Keys**: Secure, unique deploy keys for each service
+- **Branch Filtering**: Only deploys when pushed branch matches service configuration
+
 ### ⚙️ Node.js & Process Management
 
 - **Node Version Management**: Choose specific Node.js versions using NVM
@@ -248,6 +256,9 @@ APP_URL=http://localhost:5173
 
 # Domain Management (for Nginx/SSL)
 SERVER_IP=your.server.ip.address
+
+# Webhook CI/CD (public URL for GitHub to call)
+BACKEND_URL=https://api.example.com
 ```
 
 ### Frontend Environment Variables
@@ -394,6 +405,50 @@ sudo systemctl reload nginx
 - **Public Services**: All authenticated users can view and manage
 - **Admin Access**: Admins can see and manage all services (private and public)
 
+### CI/CD Webhooks
+
+Enable automatic deployments when you push to GitHub.
+
+#### Enabling CI/CD for a Service
+
+1. Open a **service details** page
+2. Find the **CI/CD Webhook** section
+3. Toggle the switch to **enable**
+4. The system will automatically:
+   - Generate a unique deploy key
+   - Create a webhook on your GitHub repository
+   - Start listening for push events
+
+#### How It Works
+
+```
+Push to GitHub → GitHub sends webhook → PM2 Dashboard receives event
+                                              ↓
+              ← Service reloaded ← Build & Install ← Pull latest code
+```
+
+When you push to the configured branch:
+
+1. GitHub sends a push event to your PM2 Dashboard
+2. The dashboard validates the deploy key and branch
+3. If the branch matches, it triggers a reload:
+   - Pulls latest code from GitHub
+   - Runs `npm install` / `yarn install`
+   - Runs build script (if configured)
+   - Reloads the PM2 process (zero-downtime)
+
+#### Requirements
+
+- **BACKEND_URL**: Must be set to your public backend URL
+- **GitHub Token**: Must have webhook permissions (check token scopes)
+- **Public Access**: Your backend must be accessible from GitHub's servers
+
+#### Disabling CI/CD
+
+1. Toggle the switch to **disable**
+2. The webhook will be automatically removed from GitHub
+3. Push events will no longer trigger deployments
+
 ### Managing Custom Domains
 
 The PM2 Dashboard allows you to attach custom domains to your services with automatic SSL certificates.
@@ -467,6 +522,7 @@ pm2-dashboard/
 │   │   │   ├── email/        # Email service (nodemailer)
 │   │   │   ├── github/       # GitHub integration
 │   │   │   ├── pm2/          # PM2 service management
+│   │   │   ├── webhook/      # GitHub webhook CI/CD
 │   │   │   ├── environment/  # Environment management
 │   │   │   ├── logger/       # Logging service
 │   │   │   ├── config/       # Configuration
@@ -598,7 +654,16 @@ pm2-dashboard/
 | `POST`   | `/domains/:id/activate`         | Activate domain (create Nginx + SSL)     |
 | `DELETE` | `/domains/:id`                  | Delete domain and cleanup Nginx/SSL      |
 
-**Note**: All endpoints except `/auth/login` require JWT authentication via Bearer token.
+### Webhooks (CI/CD)
+
+| Method   | Endpoint                        | Description                           | Auth     |
+| -------- | ------------------------------- | ------------------------------------- | -------- |
+| `POST`   | `/webhook/:deployKey`           | Receive GitHub push events            | Public   |
+| `GET`    | `/services/:id/webhook/status`  | Get webhook status for a service      | Required |
+| `POST`   | `/services/:id/webhook/enable`  | Enable webhook (creates on GitHub)    | Required |
+| `DELETE` | `/services/:id/webhook/disable` | Disable webhook (removes from GitHub) | Required |
+
+**Note**: All endpoints except `/auth/login` and `/webhook/:deployKey` require JWT authentication via Bearer token.
 
 ---
 
@@ -863,6 +928,39 @@ sudo chmod 440 /etc/sudoers.d/pm2-dashboard
 
 </details>
 
+<details>
+<summary><b>Webhook/CI-CD Issues</b></summary>
+
+**Webhook not triggering deployments:**
+
+1. Verify `BACKEND_URL` is set correctly in your `.env`
+2. Ensure your backend is publicly accessible (not `localhost`)
+3. Check GitHub token has webhook permissions
+4. Verify the push is to the correct branch
+
+```bash
+# Check if webhook was created on GitHub
+# Go to your repo → Settings → Webhooks
+# You should see your PM2 Dashboard webhook listed
+
+# Check backend logs for webhook events
+pm2 logs pm2-dashboard-backend
+```
+
+**Webhook creation fails:**
+
+- Ensure GitHub token has `admin:repo_hook` scope
+- Token must have write access to the repository
+- Repository must not already have the same webhook URL
+
+**Push events not received:**
+
+- Backend must be accessible from internet (GitHub needs to reach it)
+- Check firewall allows incoming connections on your backend port
+- Verify SSL certificate is valid (GitHub rejects invalid certs)
+
+</details>
+
 ---
 
 ## 📸 Screenshots
@@ -921,6 +1019,7 @@ For issues and questions:
 - [x] Custom domain management with Nginx
 - [x] Automatic SSL certificates (Let's Encrypt)
 - [x] Cloudflare proxy support
+- [x] GitHub Webhooks for CI/CD (auto-deploy on push)
 - [ ] WebSocket support for real-time updates
 - [ ] Docker containerization
 - [ ] Kubernetes integration
