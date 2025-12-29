@@ -644,13 +644,14 @@ pm2 logs
 
 ## 📸 Screenshots
 
-![Dashboard](https://github.com/user-attachments/assets/2d3b5f81-2e8b-41f3-8b65-1e574e58250f)
+![Dashboard](https://github.com/user-attachments/assets/2873363d-dc0f-48de-81bc-2429b0e9cfe1)
 _Main Dashboard View_
 
-![Services](https://github.com/user-attachments/assets/f01f4b49-8a02-4589-9030-a1aca41ab667)
+![Services](https://github.com/user-attachments/assets/96449477-9bed-453e-af8b-1f1944e1fe7c)
 _Service Management_
 
-![Service Details](https://github.com/user-attachments/assets/bca66e51-c4f4-40a1-bb70-c4b54047f428)
+![Service Details](https://github.com/user-attachments/assets/d05a4674-d529-449b-a6eb-0f776176ce66)
+![Service Details](https://github.com/user-attachments/assets/96b612e5-c1c8-41bb-bc2b-b7c485b557f9)
 _Service Details & Metrics_
 
 ---
