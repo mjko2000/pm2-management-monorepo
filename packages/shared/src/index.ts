@@ -58,7 +58,7 @@ export interface PM2Service {
   visibility?: ServiceVisibility; // private or public
   createdBy?: ServiceOwner; // Owner of the service
   isOwner?: boolean; // Whether the current user is the owner
-n  packageManager?: PackageManager; // Package manager to use for install/build
+  packageManager?: PackageManager; // Package manager to use for install/build
 }
 
 // GitHub Token Config
