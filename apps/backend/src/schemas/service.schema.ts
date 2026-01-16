@@ -73,7 +73,7 @@ export class Service extends Document {
   @Prop({ default: false })
   autostart?: boolean;
 
-  @Prop({ required: true, enum: ["yarn", "npm"], default: "yarn" })
+  @Prop({ required: true, enum: ["yarn", "npm", "pnpm"], default: "yarn" })
   packageManager: PackageManager;
 
   // Webhook CI/CD fields

@@ -1,5 +1,5 @@
 export type ServiceVisibility = "private" | "public";
-export type PackageManager = "yarn" | "npm";
+export type PackageManager = "yarn" | "npm" | "pnpm";
 
 export interface PM2Service {
   id: string;

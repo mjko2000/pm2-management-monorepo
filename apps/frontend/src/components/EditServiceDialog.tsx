@@ -261,6 +261,7 @@ export default function EditServiceDialog({
               >
                 <MenuItem value="yarn">Yarn</MenuItem>
                 <MenuItem value="npm">npm</MenuItem>
+                <MenuItem value="pnpm">pnpm</MenuItem>
               </Select>
             </FormControl>
             <FormControlLabel
