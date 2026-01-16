@@ -1,4 +1,5 @@
 export type ServiceVisibility = "private" | "public";
+export type PackageManager = "yarn" | "npm";
 
 export interface PM2Service {
   id: string;
@@ -18,6 +19,7 @@ export interface PM2Service {
   autostart?: boolean;
   visibility?: ServiceVisibility;
   createdBy?: string;
+  packageManager?: PackageManager;
 }
 
 export interface Environment {

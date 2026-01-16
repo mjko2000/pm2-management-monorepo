@@ -73,6 +73,14 @@ export default function ServiceInformation({
             size="small"
           />
         </Typography>
+        <Typography variant="body1" gutterBottom>
+          <strong>Package Manager:</strong>{" "}
+          <Chip
+            label={service.packageManager === "npm" ? "npm" : "Yarn"}
+            color="default"
+            size="small"
+          />
+        </Typography>
         {service.createdBy && (
           <Typography variant="body1" gutterBottom>
             <strong>Owner:</strong>{" "}

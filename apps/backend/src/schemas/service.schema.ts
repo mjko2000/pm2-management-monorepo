@@ -2,6 +2,7 @@ import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { Document, Types } from "mongoose";
 import {
   Environment,
+  PackageManager,
   ServiceStatus,
   ServiceVisibility,
 } from "@pm2-dashboard/shared";
@@ -71,6 +72,9 @@ export class Service extends Document {
 
   @Prop({ default: false })
   autostart?: boolean;
+
+  @Prop({ required: true, enum: ["yarn", "npm"], default: "yarn" })
+  packageManager: PackageManager;
 
   // Webhook CI/CD fields
   @Prop()
