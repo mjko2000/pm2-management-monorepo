@@ -76,7 +76,13 @@ export default function ServiceInformation({
         <Typography variant="body1" gutterBottom>
           <strong>Package Manager:</strong>{" "}
           <Chip
-            label={service.packageManager === "npm" ? "npm" : "Yarn"}
+            label={
+              service.packageManager === "npm"
+                ? "npm"
+                : service.packageManager === "pnpm"
+                  ? "pnpm"
+                  : "Yarn"
+            }
             color="default"
             size="small"
           />

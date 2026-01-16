@@ -657,14 +657,10 @@ export class PM2Service implements OnModuleInit {
       );
     }
 
-    // Run install command
-    const installCmd =
-      packageManager === "npm"
-        ? `${packageManagerPath} install`
-        : `${packageManagerPath} install`;
-    await execPromise(installCmd, { cwd });
+    // Run install command (works for yarn, npm, and pnpm)
+    await execPromise(`${packageManagerPath} install`, { cwd });
 
-    // For npm commands, run build if available
+    // Run build if available
     if (service.useNpm) {
       try {
         const fs = require("fs");
@@ -677,11 +673,8 @@ export class PM2Service implements OnModuleInit {
           this.logger.log(
             `Building ${service.name} using ${packageManager}...`
           );
-          const buildCmd =
-            packageManager === "npm"
-              ? `${packageManagerPath} run build`
-              : `${packageManagerPath} run build`;
-          await execPromise(buildCmd, { cwd });
+          // "run build" works for yarn, npm, and pnpm
+          await execPromise(`${packageManagerPath} run build`, { cwd });
         }
       } catch (error) {
         throw new Error(`Failed to install/build service: ${error.message}`);

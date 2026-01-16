@@ -9,7 +9,7 @@ export interface Environment {
 export type ServiceVisibility = "private" | "public";
 
 // Package manager type
-export type PackageManager = "yarn" | "npm";
+export type PackageManager = "yarn" | "npm" | "pnpm";
 
 // Service owner interface
 export interface ServiceOwner {
