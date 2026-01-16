@@ -643,18 +643,26 @@ export class PM2Service implements OnModuleInit {
     const util = require("util");
     const execPromise = util.promisify(exec);
 
-    // Run npm install
-    this.logger.log(`Installing dependencies for ${service.name}...`);
+    // Determine which package manager to use (default to yarn for backwards compatibility)
+    const packageManager = service.packageManager || "yarn";
+    this.logger.log(
+      `Installing dependencies for ${service.name} using ${packageManager}...`
+    );
 
-    let yarnPath = "yarn";
+    let packageManagerPath: string = packageManager;
     if (service.nodeVersion) {
-      yarnPath = `${this.nvmDir}/${service.nodeVersion}/bin/yarn`;
+      packageManagerPath = `${this.nvmDir}/${service.nodeVersion}/bin/${packageManager}`;
       this.logger.log(
         `Using Node.js version ${service.nodeVersion} for ${service.name}...`
       );
     }
 
-    await execPromise(`${yarnPath} install`, { cwd });
+    // Run install command
+    const installCmd =
+      packageManager === "npm"
+        ? `${packageManagerPath} install`
+        : `${packageManagerPath} install`;
+    await execPromise(installCmd, { cwd });
 
     // For npm commands, run build if available
     if (service.useNpm) {
@@ -666,8 +674,14 @@ export class PM2Service implements OnModuleInit {
         );
 
         if (packageJson.scripts?.build) {
-          this.logger.log(`Building ${service.name}...`);
-          await execPromise(`${yarnPath} run build`, { cwd });
+          this.logger.log(
+            `Building ${service.name} using ${packageManager}...`
+          );
+          const buildCmd =
+            packageManager === "npm"
+              ? `${packageManagerPath} run build`
+              : `${packageManagerPath} run build`;
+          await execPromise(buildCmd, { cwd });
         }
       } catch (error) {
         throw new Error(`Failed to install/build service: ${error.message}`);

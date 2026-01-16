@@ -8,6 +8,9 @@ export interface Environment {
 // Service visibility type
 export type ServiceVisibility = "private" | "public";
 
+// Package manager type
+export type PackageManager = "yarn" | "npm";
+
 // Service owner interface
 export interface ServiceOwner {
   _id: string;
@@ -55,6 +58,7 @@ export interface PM2Service {
   visibility?: ServiceVisibility; // private or public
   createdBy?: ServiceOwner; // Owner of the service
   isOwner?: boolean; // Whether the current user is the owner
+  packageManager?: PackageManager; // Package manager to use for install/build
 }
 
 // GitHub Token Config

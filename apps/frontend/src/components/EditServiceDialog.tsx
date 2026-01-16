@@ -20,6 +20,7 @@ import {
   PM2Service,
   Repository,
   ServiceVisibility,
+  PackageManager,
 } from "@pm2-dashboard/shared";
 import { useQuery } from "react-query";
 import { getRepositories, getBranches } from "../api/github";
@@ -56,6 +57,7 @@ export default function EditServiceDialog({
     autostart: false,
     visibility: "private" as ServiceVisibility,
     githubTokenId: "",
+    packageManager: "yarn" as PackageManager,
   });
 
   const [useCluster, setUseCluster] = useState(false);
@@ -108,6 +110,7 @@ export default function EditServiceDialog({
         githubTokenId:
           (service as PM2Service & { githubTokenId?: string }).githubTokenId ||
           "",
+        packageManager: service.packageManager || "yarn",
       });
       setUseCluster(hasCluster);
       setClusterInstances(hasCluster ? service.cluster! : 1);
@@ -246,6 +249,18 @@ export default function EditServiceDialog({
                     {version}
                   </MenuItem>
                 ))}
+              </Select>
+            </FormControl>
+            <FormControl fullWidth>
+              <InputLabel>Package Manager</InputLabel>
+              <Select
+                name="packageManager"
+                value={formData.packageManager || "yarn"}
+                label="Package Manager"
+                onChange={handleSelectChange}
+              >
+                <MenuItem value="yarn">Yarn</MenuItem>
+                <MenuItem value="npm">npm</MenuItem>
               </Select>
             </FormControl>
             <FormControlLabel

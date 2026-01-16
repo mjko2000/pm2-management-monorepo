@@ -27,6 +27,7 @@ import {
   PM2Service,
   ServiceStatus,
   ServiceVisibility,
+  PackageManager,
 } from "@pm2-dashboard/shared";
 
 interface NewServiceForm {
@@ -46,6 +47,7 @@ interface NewServiceForm {
   clusterInstances: number;
   autostart: boolean;
   visibility: ServiceVisibility;
+  packageManager: PackageManager;
 }
 
 export default function NewService() {
@@ -68,6 +70,7 @@ export default function NewService() {
       clusterInstances: 1,
       autostart: false,
       visibility: "private",
+      packageManager: "yarn",
     },
   });
 
@@ -122,6 +125,7 @@ export default function NewService() {
         autostart: data.autostart,
         githubTokenId: data.githubTokenId,
         visibility: data.visibility,
+        packageManager: data.packageManager,
       };
       return createService(serviceData);
     },
@@ -351,6 +355,22 @@ export default function NewService() {
                             {version}
                           </MenuItem>
                         ))}
+                      </Select>
+                    </FormControl>
+                  )}
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Controller
+                  name="packageManager"
+                  control={control}
+                  render={({ field }) => (
+                    <FormControl fullWidth>
+                      <InputLabel>Package Manager</InputLabel>
+                      <Select {...field} label="Package Manager">
+                        <MenuItem value="yarn">Yarn</MenuItem>
+                        <MenuItem value="npm">npm</MenuItem>
                       </Select>
                     </FormControl>
                   )}
