@@ -11,6 +11,9 @@ export type ServiceVisibility = "private" | "public";
 // Package manager type
 export type PackageManager = "yarn" | "npm" | "pnpm";
 
+// Service type
+export type ServiceType = "node" | "static";
+
 // Service owner interface
 export interface ServiceOwner {
   _id: string;
@@ -42,7 +45,7 @@ export interface PM2Service {
   repositoryUrl: string;
   branch: string;
   sourceDirectory?: string; // In case the service is in a subdirectory
-  script: string;
+  script?: string;
   args?: string;
   environments: Environment[];
   activeEnvironment?: string;
@@ -59,6 +62,9 @@ export interface PM2Service {
   createdBy?: ServiceOwner; // Owner of the service
   isOwner?: boolean; // Whether the current user is the owner
   packageManager?: PackageManager; // Package manager to use for install/build
+  serviceType?: ServiceType; // "node" for Node.js apps, "static" for static websites
+  outputDirectory?: string; // Build output directory for static sites (default: "dist")
+  port?: number; // Port for the static file server
 }
 
 // GitHub Token Config

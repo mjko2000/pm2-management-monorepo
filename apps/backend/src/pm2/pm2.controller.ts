@@ -13,7 +13,11 @@ import {
 } from "@nestjs/common";
 import { ApiBearerAuth } from "@nestjs/swagger";
 import { PM2Service } from "./pm2.service";
-import { PM2Service as IPM2Service, Environment } from "@pm2-dashboard/shared";
+import {
+  PM2Service as IPM2Service,
+  Environment,
+  ServiceType,
+} from "@pm2-dashboard/shared";
 import { Service } from "@/schemas/service.schema";
 import { JwtAuthGuard } from "@/auth/guards/jwt-auth.guard";
 import {
@@ -28,7 +32,7 @@ class CreateServiceDto
   name: string;
   repositoryUrl: string;
   branch: string;
-  script: string;
+  script?: string;
   sourceDirectory?: string;
   useNpm?: boolean;
   npmScript?: string;
@@ -41,6 +45,9 @@ class CreateServiceDto
   cluster?: number | null;
   githubTokenId?: string;
   visibility?: "private" | "public";
+  serviceType?: ServiceType;
+  outputDirectory?: string;
+  port?: number;
 }
 
 class UpdateServiceDto implements Partial<IPM2Service> {
@@ -58,6 +65,9 @@ class UpdateServiceDto implements Partial<IPM2Service> {
   cluster?: number | null;
   visibility?: "private" | "public";
   githubTokenId?: string;
+  serviceType?: ServiceType;
+  outputDirectory?: string;
+  port?: number;
 }
 
 class EnvironmentDto implements Environment {

@@ -4,6 +4,7 @@ import {
   Environment,
   PackageManager,
   ServiceStatus,
+  ServiceType,
   ServiceVisibility,
 } from "@pm2-dashboard/shared";
 
@@ -75,6 +76,15 @@ export class Service extends Document {
 
   @Prop({ required: true, enum: ["yarn", "npm", "pnpm"], default: "yarn" })
   packageManager: PackageManager;
+
+  @Prop({ enum: ["node", "static"], default: "node" })
+  serviceType: ServiceType;
+
+  @Prop()
+  outputDirectory?: string;
+
+  @Prop()
+  port?: number;
 
   // Webhook CI/CD fields
   @Prop()

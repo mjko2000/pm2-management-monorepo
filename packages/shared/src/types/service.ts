@@ -1,5 +1,6 @@
 export type ServiceVisibility = "private" | "public";
 export type PackageManager = "yarn" | "npm" | "pnpm";
+export type ServiceType = "node" | "static";
 
 export interface PM2Service {
   id: string;
@@ -10,7 +11,7 @@ export interface PM2Service {
   useNpm: boolean;
   npmScript?: string;
   npmArgs?: string;
-  script: string;
+  script?: string;
   args?: string;
   environments: Environment[];
   activeEnvironment?: string;
@@ -20,6 +21,9 @@ export interface PM2Service {
   visibility?: ServiceVisibility;
   createdBy?: string;
   packageManager?: PackageManager;
+  serviceType?: ServiceType;
+  outputDirectory?: string;
+  port?: number;
 }
 
 export interface Environment {
