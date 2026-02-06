@@ -660,8 +660,30 @@ export class PM2Service implements OnModuleInit {
     // Run install command (works for yarn, npm, and pnpm)
     await execPromise(`${packageManagerPath} install`, { cwd });
 
-    // Run build if available
-    if (service.useNpm) {
+    // For static sites, always run build since the output is required
+    if (service.serviceType === "static") {
+      try {
+        this.logger.log(
+          `Building static site ${service.name} using ${packageManager}...`
+        );
+        await execPromise(`${packageManagerPath} run build`, { cwd });
+
+        // Install serve globally using the appropriate node version
+        let npxPath = "npx";
+        if (service.nodeVersion) {
+          npxPath = `${this.nvmDir}/${service.nodeVersion}/bin/npx`;
+        }
+        this.logger.log(
+          `Ensuring serve is available for ${service.name}...`
+        );
+        await execPromise(`${npxPath} --yes serve --version`, { cwd });
+      } catch (error) {
+        throw new Error(
+          `Failed to build static site: ${error.message}`
+        );
+      }
+    } else if (service.useNpm) {
+      // Run build if available (for Node.js services)
       try {
         const fs = require("fs");
         const packageJsonPath = path.join(cwd, "package.json");
@@ -706,27 +728,49 @@ export class PM2Service implements OnModuleInit {
       cwd: cwd,
     };
 
-    // Add cluster mode if specified
-    if (service.cluster && service.cluster > 0) {
-      startConfig.instances = service.cluster;
-      startConfig.exec_mode = "cluster";
-      this.logger.log(
-        `Using cluster mode with ${service.cluster} instances for ${service.name}`
-      );
-    } else {
+    if (service.serviceType === "static") {
+      // Static site: use serve to serve the build output directory
+      const outputDir = service.outputDirectory || "dist";
+      const port = service.port || 3000;
+
+      let npxPath = "npx";
+      if (service.nodeVersion) {
+        npxPath = `${this.nvmDir}/${service.nodeVersion}/bin/npx`;
+      }
+
+      startConfig.script = npxPath;
+      startConfig.args = `--yes serve -s ${outputDir} -l ${port}`;
       startConfig.instances = 1;
       startConfig.exec_mode = "fork";
-    }
 
-    if (service.useNpm) {
-      if (!service.npmScript) {
-        throw new Error(`No npm script specified for service ${service.name}`);
-      }
-      startConfig.script = npmPath;
-      startConfig.args = `${service.npmScript} ${service.npmArgs || ""}`;
+      this.logger.log(
+        `Serving static site ${service.name} from ${outputDir} on port ${port}`
+      );
     } else {
-      startConfig.script = `${service.script}`;
-      startConfig.args = service.args || "";
+      // Node.js service: use cluster or fork mode
+      if (service.cluster && service.cluster > 0) {
+        startConfig.instances = service.cluster;
+        startConfig.exec_mode = "cluster";
+        this.logger.log(
+          `Using cluster mode with ${service.cluster} instances for ${service.name}`
+        );
+      } else {
+        startConfig.instances = 1;
+        startConfig.exec_mode = "fork";
+      }
+
+      if (service.useNpm) {
+        if (!service.npmScript) {
+          throw new Error(
+            `No npm script specified for service ${service.name}`
+          );
+        }
+        startConfig.script = npmPath;
+        startConfig.args = `${service.npmScript} ${service.npmArgs || ""}`;
+      } else {
+        startConfig.script = `${service.script}`;
+        startConfig.args = service.args || "";
+      }
     }
 
     this.logger.log(

@@ -28,6 +28,7 @@ import {
   ServiceStatus,
   ServiceVisibility,
   PackageManager,
+  ServiceType,
 } from "@pm2-dashboard/shared";
 
 interface NewServiceForm {
@@ -36,6 +37,7 @@ interface NewServiceForm {
   repositoryUrl: string;
   branch: string;
   sourceDirectory?: string;
+  serviceType: ServiceType;
   useNpm: boolean;
   npmScript?: string;
   npmArgs?: string;
@@ -48,6 +50,8 @@ interface NewServiceForm {
   autostart: boolean;
   visibility: ServiceVisibility;
   packageManager: PackageManager;
+  outputDirectory: string;
+  port: number;
 }
 
 export default function NewService() {
@@ -59,6 +63,7 @@ export default function NewService() {
       repositoryUrl: "",
       branch: "",
       sourceDirectory: "",
+      serviceType: "node",
       useNpm: false,
       npmScript: "",
       npmArgs: "",
@@ -71,6 +76,8 @@ export default function NewService() {
       autostart: false,
       visibility: "private",
       packageManager: "yarn",
+      outputDirectory: "dist",
+      port: 3000,
     },
   });
 
@@ -78,6 +85,8 @@ export default function NewService() {
   const selectedRepo = watch("repositoryUrl");
   const useNpm = watch("useNpm");
   const useCluster = watch("useCluster");
+  const serviceType = watch("serviceType");
+  const isStaticSite = serviceType === "static";
 
   // Fetch GitHub tokens
   const { data: tokens, isLoading: isLoadingTokens } = useQuery({
@@ -108,24 +117,28 @@ export default function NewService() {
   // Create service mutation
   const createServiceMutation = useMutation({
     mutationFn: (data: NewServiceForm) => {
+      const isStatic = data.serviceType === "static";
       const serviceData: Omit<PM2Service, "_id"> & { githubTokenId: string } = {
         name: data.name,
         repositoryUrl: data.repositoryUrl,
         branch: data.branch,
         sourceDirectory: data.sourceDirectory,
-        useNpm: data.useNpm,
-        npmScript: data.npmScript,
-        npmArgs: data.npmArgs,
-        script: data.script,
-        args: data.args,
+        serviceType: data.serviceType,
+        useNpm: isStatic ? false : data.useNpm,
+        npmScript: isStatic ? undefined : data.npmScript,
+        npmArgs: isStatic ? undefined : data.npmArgs,
+        script: isStatic ? undefined : data.script,
+        args: isStatic ? undefined : data.args,
         nodeVersion: data.nodeVersion,
-        cluster: data.useCluster ? data.clusterInstances : null,
+        cluster: isStatic ? null : data.useCluster ? data.clusterInstances : null,
         environments: [],
         status: ServiceStatus.STOPPED,
         autostart: data.autostart,
         githubTokenId: data.githubTokenId,
         visibility: data.visibility,
         packageManager: data.packageManager,
+        outputDirectory: isStatic ? data.outputDirectory : undefined,
+        port: isStatic ? data.port : undefined,
       };
       return createService(serviceData);
     },
@@ -193,6 +206,26 @@ export default function NewService() {
                       error={!!error}
                       helperText={error?.message}
                     />
+                  )}
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Controller
+                  name="serviceType"
+                  control={control}
+                  render={({ field }) => (
+                    <FormControl fullWidth>
+                      <InputLabel>Service Type</InputLabel>
+                      <Select {...field} label="Service Type">
+                        <MenuItem value="node">
+                          Node.js Application
+                        </MenuItem>
+                        <MenuItem value="static">
+                          Static Website (React, Vite, etc.)
+                        </MenuItem>
+                      </Select>
+                    </FormControl>
                   )}
                 />
               </Grid>
@@ -378,25 +411,27 @@ export default function NewService() {
                 />
               </Grid>
 
-              <Grid item xs={12}>
-                <Controller
-                  name="useCluster"
-                  control={control}
-                  render={({ field }) => (
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={field.value}
-                          onChange={(e) => field.onChange(e.target.checked)}
-                        />
-                      }
-                      label="Use cluster mode"
-                    />
-                  )}
-                />
-              </Grid>
+              {!isStaticSite && (
+                <Grid item xs={12}>
+                  <Controller
+                    name="useCluster"
+                    control={control}
+                    render={({ field }) => (
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={field.value}
+                            onChange={(e) => field.onChange(e.target.checked)}
+                          />
+                        }
+                        label="Use cluster mode"
+                      />
+                    )}
+                  />
+                </Grid>
+              )}
 
-              {useCluster && (
+              {!isStaticSite && useCluster && (
                 <Grid item xs={12}>
                   <Controller
                     name="clusterInstances"
@@ -470,43 +505,18 @@ export default function NewService() {
                 />
               </Grid>
 
-              <Grid item xs={12}>
-                <Controller
-                  name="useNpm"
-                  control={control}
-                  render={({ field }) => (
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={field.value}
-                          onChange={(e) => field.onChange(e.target.checked)}
-                        />
-                      }
-                      label="Use npm to start the service"
-                    />
-                  )}
-                />
-              </Grid>
-
-              {useNpm ? (
+              {isStaticSite ? (
                 <>
                   <Grid item xs={12}>
                     <Controller
-                      name="npmScript"
+                      name="outputDirectory"
                       control={control}
-                      rules={{
-                        required: "npm script is required when using npm",
-                      }}
-                      render={({ field, fieldState: { error } }) => (
+                      render={({ field }) => (
                         <TextField
                           {...field}
-                          label="npm Script"
+                          label="Build Output Directory"
                           fullWidth
-                          error={!!error}
-                          helperText={
-                            error?.message ||
-                            "The npm script to run (e.g., 'start', 'dev')"
-                          }
+                          helperText='Directory containing the built static files (e.g., "dist" for Vite, "build" for CRA, "out" for Next.js export)'
                         />
                       )}
                     />
@@ -514,17 +524,35 @@ export default function NewService() {
 
                   <Grid item xs={12}>
                     <Controller
-                      name="npmArgs"
+                      name="port"
                       control={control}
-                      render={({ field }) => (
+                      rules={{
+                        required: "Port is required for static sites",
+                        min: {
+                          value: 1,
+                          message: "Port must be at least 1",
+                        },
+                        max: {
+                          value: 65535,
+                          message: "Port cannot exceed 65535",
+                        },
+                      }}
+                      render={({ field, fieldState: { error } }) => (
                         <TextField
                           {...field}
-                          label="npm Arguments (optional)"
+                          label="Port"
                           fullWidth
-                          helperText="Space-separated arguments to pass to npm (e.g., '-- --port 3000')"
+                          type="number"
+                          inputProps={{ min: 1, max: 65535 }}
+                          error={!!error}
+                          helperText={
+                            error?.message ||
+                            "Port on which the static file server will listen"
+                          }
+                          value={field.value}
                           onChange={(e) => {
-                            const args = e.target.value;
-                            setValue("npmArgs", args);
+                            const value = parseInt(e.target.value, 10);
+                            field.onChange(isNaN(value) ? 3000 : value);
                           }}
                         />
                       )}
@@ -535,42 +563,107 @@ export default function NewService() {
                 <>
                   <Grid item xs={12}>
                     <Controller
-                      name="script"
+                      name="useNpm"
                       control={control}
-                      rules={{ required: "Script path is required" }}
-                      render={({ field, fieldState: { error } }) => (
-                        <TextField
-                          {...field}
-                          label="Script Path"
-                          fullWidth
-                          error={!!error}
-                          helperText={
-                            error?.message ||
-                            "Path to the script file relative to the source directory"
+                      render={({ field }) => (
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={field.value}
+                              onChange={(e) => field.onChange(e.target.checked)}
+                            />
                           }
+                          label="Use npm to start the service"
                         />
                       )}
                     />
                   </Grid>
 
-                  <Grid item xs={12}>
-                    <Controller
-                      name="args"
-                      control={control}
-                      render={({ field }) => (
-                        <TextField
-                          {...field}
-                          label="Arguments (optional)"
-                          fullWidth
-                          helperText="Space-separated arguments to pass to the script"
-                          onChange={(e) => {
-                            const args = e.target.value;
-                            setValue("args", args);
+                  {useNpm ? (
+                    <>
+                      <Grid item xs={12}>
+                        <Controller
+                          name="npmScript"
+                          control={control}
+                          rules={{
+                            required: "npm script is required when using npm",
                           }}
+                          render={({ field, fieldState: { error } }) => (
+                            <TextField
+                              {...field}
+                              label="npm Script"
+                              fullWidth
+                              error={!!error}
+                              helperText={
+                                error?.message ||
+                                "The npm script to run (e.g., 'start', 'dev')"
+                              }
+                            />
+                          )}
                         />
-                      )}
-                    />
-                  </Grid>
+                      </Grid>
+
+                      <Grid item xs={12}>
+                        <Controller
+                          name="npmArgs"
+                          control={control}
+                          render={({ field }) => (
+                            <TextField
+                              {...field}
+                              label="npm Arguments (optional)"
+                              fullWidth
+                              helperText="Space-separated arguments to pass to npm (e.g., '-- --port 3000')"
+                              onChange={(e) => {
+                                const args = e.target.value;
+                                setValue("npmArgs", args);
+                              }}
+                            />
+                          )}
+                        />
+                      </Grid>
+                    </>
+                  ) : (
+                    <>
+                      <Grid item xs={12}>
+                        <Controller
+                          name="script"
+                          control={control}
+                          rules={{ required: "Script path is required" }}
+                          render={({ field, fieldState: { error } }) => (
+                            <TextField
+                              {...field}
+                              label="Script Path"
+                              fullWidth
+                              error={!!error}
+                              helperText={
+                                error?.message ||
+                                "Path to the script file relative to the source directory"
+                              }
+                            />
+                          )}
+                        />
+                      </Grid>
+
+                      <Grid item xs={12}>
+                        <Controller
+                          name="args"
+                          control={control}
+                          render={({ field }) => (
+                            <TextField
+                              {...field}
+                              label="Arguments (optional)"
+                              fullWidth
+                              helperText="Space-separated arguments to pass to the script"
+                              onChange={(e) => {
+                                const args = e.target.value;
+                                setValue("args", args);
+                              }}
+                            />
+                          )}
+                        />
+                      </Grid>
+                    </>
+                  )}
                 </>
               )}
 

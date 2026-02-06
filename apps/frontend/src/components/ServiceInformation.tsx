@@ -36,14 +36,34 @@ export default function ServiceInformation({
       <Divider />
       <CardContent>
         <Typography variant="body1" gutterBottom>
+          <strong>Type:</strong>{" "}
+          <Chip
+            label={service.serviceType === "static" ? "Static Website" : "Node.js Application"}
+            color={service.serviceType === "static" ? "info" : "primary"}
+            size="small"
+          />
+        </Typography>
+        <Typography variant="body1" gutterBottom>
           <strong>Repository:</strong> {service.repositoryUrl}
         </Typography>
         <Typography variant="body1" gutterBottom>
           <strong>Branch:</strong> {service.branch}
         </Typography>
-        <Typography variant="body1" gutterBottom>
-          <strong>Script:</strong> {service.script}
-        </Typography>
+        {service.serviceType === "static" ? (
+          <>
+            <Typography variant="body1" gutterBottom>
+              <strong>Output Directory:</strong>{" "}
+              {service.outputDirectory || "dist"}
+            </Typography>
+            <Typography variant="body1" gutterBottom>
+              <strong>Port:</strong> {service.port || 3000}
+            </Typography>
+          </>
+        ) : (
+          <Typography variant="body1" gutterBottom>
+            <strong>Script:</strong> {service.script}
+          </Typography>
+        )}
         {service.sourceDirectory && (
           <Typography variant="body1" gutterBottom>
             <strong>Source Directory:</strong> {service.sourceDirectory}

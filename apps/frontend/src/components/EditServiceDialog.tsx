@@ -20,6 +20,7 @@ import {
   PM2Service,
   Repository,
   ServiceVisibility,
+  ServiceType,
   PackageManager,
 } from "@pm2-dashboard/shared";
 import { useQuery } from "react-query";
@@ -47,6 +48,7 @@ export default function EditServiceDialog({
     repositoryUrl: "",
     branch: "",
     sourceDirectory: "",
+    serviceType: "node" as ServiceType,
     script: "",
     args: "",
     useNpm: false,
@@ -58,6 +60,8 @@ export default function EditServiceDialog({
     visibility: "private" as ServiceVisibility,
     githubTokenId: "",
     packageManager: "yarn" as PackageManager,
+    outputDirectory: "dist",
+    port: 3000,
   });
 
   const [useCluster, setUseCluster] = useState(false);
@@ -98,7 +102,8 @@ export default function EditServiceDialog({
         repositoryUrl: service.repositoryUrl,
         branch: service.branch,
         sourceDirectory: service.sourceDirectory || "",
-        script: service.script,
+        serviceType: service.serviceType || "node",
+        script: service.script || "",
         args: service.args || "",
         useNpm: service.useNpm || false,
         npmScript: service.npmScript || "",
@@ -111,6 +116,8 @@ export default function EditServiceDialog({
           (service as PM2Service & { githubTokenId?: string }).githubTokenId ||
           "",
         packageManager: service.packageManager || "yarn",
+        outputDirectory: service.outputDirectory || "dist",
+        port: service.port || 3000,
       });
       setUseCluster(hasCluster);
       setClusterInstances(hasCluster ? service.cluster! : 1);
@@ -169,6 +176,20 @@ export default function EditServiceDialog({
               required
               fullWidth
             />
+            <FormControl fullWidth>
+              <InputLabel>Service Type</InputLabel>
+              <Select
+                name="serviceType"
+                value={formData.serviceType || "node"}
+                label="Service Type"
+                onChange={handleSelectChange}
+              >
+                <MenuItem value="node">Node.js Application</MenuItem>
+                <MenuItem value="static">
+                  Static Website (React, Vite, etc.)
+                </MenuItem>
+              </Select>
+            </FormControl>
             <FormControl fullWidth>
               <InputLabel>GitHub Token</InputLabel>
               <Select
@@ -264,42 +285,46 @@ export default function EditServiceDialog({
                 <MenuItem value="pnpm">pnpm</MenuItem>
               </Select>
             </FormControl>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={useCluster}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    setUseCluster(checked);
-                    setFormData((prev) => ({
-                      ...prev,
-                      cluster: checked ? clusterInstances : null,
-                    }));
-                  }}
+            {formData.serviceType !== "static" && (
+              <>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={useCluster}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setUseCluster(checked);
+                        setFormData((prev) => ({
+                          ...prev,
+                          cluster: checked ? clusterInstances : null,
+                        }));
+                      }}
+                    />
+                  }
+                  label="Use cluster mode"
                 />
-              }
-              label="Use cluster mode"
-            />
-            {useCluster && (
-              <TextField
-                label="Number of Cluster Instances"
-                value={clusterInstances}
-                onChange={(e) => {
-                  const value = parseInt(e.target.value, 10);
-                  const instances = isNaN(value)
-                    ? 1
-                    : Math.max(1, Math.min(16, value));
-                  setClusterInstances(instances);
-                  setFormData((prev) => ({
-                    ...prev,
-                    cluster: instances,
-                  }));
-                }}
-                type="number"
-                inputProps={{ min: 1, max: 16 }}
-                fullWidth
-                helperText="Number of cluster instances to run"
-              />
+                {useCluster && (
+                  <TextField
+                    label="Number of Cluster Instances"
+                    value={clusterInstances}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value, 10);
+                      const instances = isNaN(value)
+                        ? 1
+                        : Math.max(1, Math.min(16, value));
+                      setClusterInstances(instances);
+                      setFormData((prev) => ({
+                        ...prev,
+                        cluster: instances,
+                      }));
+                    }}
+                    type="number"
+                    inputProps={{ min: 1, max: 16 }}
+                    fullWidth
+                    helperText="Number of cluster instances to run"
+                  />
+                )}
+              </>
             )}
             <FormControlLabel
               control={
@@ -327,48 +352,79 @@ export default function EditServiceDialog({
                 </MenuItem>
               </Select>
             </FormControl>
-            <FormControlLabel
-              control={
-                <Switch
-                  name="useNpm"
-                  checked={formData.useNpm}
-                  onChange={handleInputChange}
-                />
-              }
-              label="Use NPM"
-            />
-            {formData.useNpm && (
+            {formData.serviceType === "static" ? (
               <>
                 <TextField
-                  name="npmScript"
-                  label="NPM Script"
-                  value={formData.npmScript}
+                  name="outputDirectory"
+                  label="Build Output Directory"
+                  value={formData.outputDirectory || "dist"}
+                  onChange={handleInputChange}
+                  fullWidth
+                  helperText='Directory containing the built static files (e.g., "dist" for Vite, "build" for CRA, "out" for Next.js export)'
+                />
+                <TextField
+                  name="port"
+                  label="Port"
+                  value={formData.port || 3000}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value, 10);
+                    setFormData((prev) => ({
+                      ...prev,
+                      port: isNaN(value) ? 3000 : value,
+                    }));
+                  }}
+                  type="number"
+                  inputProps={{ min: 1, max: 65535 }}
+                  fullWidth
+                  helperText="Port on which the static file server will listen"
+                />
+              </>
+            ) : (
+              <>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      name="useNpm"
+                      checked={formData.useNpm}
+                      onChange={handleInputChange}
+                    />
+                  }
+                  label="Use NPM"
+                />
+                {formData.useNpm && (
+                  <>
+                    <TextField
+                      name="npmScript"
+                      label="NPM Script"
+                      value={formData.npmScript}
+                      onChange={handleInputChange}
+                      fullWidth
+                    />
+                    <TextField
+                      name="npmArgs"
+                      label="NPM Arguments"
+                      value={formData.npmArgs}
+                      onChange={handleInputChange}
+                      fullWidth
+                    />
+                  </>
+                )}
+                <TextField
+                  name="script"
+                  label="Script"
+                  value={formData.script}
                   onChange={handleInputChange}
                   fullWidth
                 />
                 <TextField
-                  name="npmArgs"
-                  label="NPM Arguments"
-                  value={formData.npmArgs}
+                  name="args"
+                  label="Arguments"
+                  value={formData.args}
                   onChange={handleInputChange}
                   fullWidth
                 />
               </>
             )}
-            <TextField
-              name="script"
-              label="Script"
-              value={formData.script}
-              onChange={handleInputChange}
-              fullWidth
-            />
-            <TextField
-              name="args"
-              label="Arguments"
-              value={formData.args}
-              onChange={handleInputChange}
-              fullWidth
-            />
           </Box>
         </DialogContent>
         <DialogActions>
