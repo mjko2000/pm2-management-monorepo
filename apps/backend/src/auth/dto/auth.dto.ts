@@ -8,9 +8,9 @@ import {
   IsIn,
   IsBoolean,
   Matches,
+  Length,
 } from "class-validator";
 
-// Username validation: 3-20 chars, alphanumeric, underscores, no spaces
 const USERNAME_REGEX = /^[a-zA-Z0-9_]+$/;
 const USERNAME_MESSAGE =
   "Username can only contain letters, numbers, and underscores (no spaces)";
@@ -99,11 +99,84 @@ export class ChangePasswordDto {
   newPassword: string;
 }
 
+export class FirstLoginSetupDto {
+  @IsNotEmpty()
+  @IsString()
+  @MinLength(6)
+  newPassword: string;
+
+  @IsNotEmpty()
+  @IsEmail()
+  newEmail: string;
+}
+
+export class Verify2faDto {
+  @IsNotEmpty()
+  @IsString()
+  challengeId: string;
+
+  @IsNotEmpty()
+  @IsIn(["emailOtp", "totp"])
+  method: "emailOtp" | "totp";
+
+  @IsNotEmpty()
+  @IsString()
+  @Length(6, 6)
+  code: string;
+}
+
+export class SendEmailOtpDto {
+  @IsNotEmpty()
+  @IsString()
+  challengeId: string;
+}
+
+export class TotpSetupDto {
+  @IsNotEmpty()
+  @IsString()
+  @Length(6, 6)
+  code: string;
+}
+
+export class Update2faSettingsDto {
+  @IsOptional()
+  @IsBoolean()
+  emailOtpEnabled?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  totpEnabled?: boolean;
+}
+
 export interface JwtPayload {
   sub: string;
   username: string;
   role: string;
 }
+
+export interface AuthChallenge {
+  userId: string;
+  methods: ("emailOtp" | "totp")[];
+  expiresAt: Date;
+  totpAttempts: number;
+}
+
+export type LoginResult =
+  | {
+      status: "SUCCESS";
+      access_token: string;
+      user: { id: string; username: string; email: string; role: string };
+    }
+  | {
+      status: "FIRST_LOGIN_REQUIRED";
+      access_token: string;
+      user: { id: string; username: string; email: string; role: string };
+    }
+  | {
+      status: "TWO_FACTOR_REQUIRED";
+      challengeId: string;
+      methods: ("emailOtp" | "totp")[];
+    };
 
 export interface AuthResponse {
   access_token: string;
@@ -112,5 +185,11 @@ export interface AuthResponse {
     username: string;
     email: string;
     role: string;
+    mustChangePassword?: boolean;
+    mustChangeEmail?: boolean;
+    twoFactor?: {
+      emailOtpEnabled: boolean;
+      totpEnabled: boolean;
+    };
   };
 }

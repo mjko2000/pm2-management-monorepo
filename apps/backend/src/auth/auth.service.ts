@@ -4,12 +4,14 @@ import {
   ConflictException,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import * as bcrypt from "bcrypt";
 import * as crypto from "crypto";
+import { generateSecret, generateSync, verifySync, generateURI } from "otplib";
 import { User, UserDocument } from "@/schemas/user.schema";
 import { EmailService } from "@/email/email.service";
 import {
@@ -18,9 +20,22 @@ import {
   UpdateUserDto,
   UpdateProfileDto,
   ChangePasswordDto,
+  FirstLoginSetupDto,
+  Verify2faDto,
+  TotpSetupDto,
+  Update2faSettingsDto,
   JwtPayload,
+  AuthChallenge,
+  LoginResult,
   AuthResponse,
 } from "./dto/auth.dto";
+
+const CHALLENGE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const EMAIL_OTP_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_OTP_ATTEMPTS = 5;
+
+// In-memory challenge store. Lightweight since challenges are short-lived.
+const challengeStore = new Map<string, AuthChallenge>();
 
 @Injectable()
 export class AuthService {
@@ -28,9 +43,21 @@ export class AuthService {
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     private jwtService: JwtService,
     private emailService: EmailService
-  ) {}
+  ) {
+    // Periodic cleanup of expired challenges
+    setInterval(() => this.cleanupChallenges(), 60 * 1000);
+  }
 
-  private generateRandomPassword(length: number = 12): string {
+  private cleanupChallenges(): void {
+    const now = new Date();
+    for (const [id, challenge] of challengeStore) {
+      if (challenge.expiresAt < now) {
+        challengeStore.delete(id);
+      }
+    }
+  }
+
+  private generateRandomPassword(length = 12): string {
     const chars =
       "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
     let password = "";
@@ -41,14 +68,16 @@ export class AuthService {
     return password;
   }
 
+  private generateChallengeId(): string {
+    return crypto.randomBytes(32).toString("hex");
+  }
+
   async createUser(createUserDto: CreateUserDto): Promise<UserDocument> {
     const { username, email, role } = createUserDto;
 
-    // Generate random password if not provided
     const plainPassword =
       createUserDto.password || this.generateRandomPassword();
 
-    // Check if user already exists
     const existingUser = await this.userModel.findOne({
       $or: [{ username }, { email }],
     });
@@ -57,11 +86,8 @@ export class AuthService {
       throw new ConflictException("Username or email already exists");
     }
 
-    // Hash password
-    const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(plainPassword, saltRounds);
+    const hashedPassword = await bcrypt.hash(plainPassword, 10);
 
-    // Create user
     const user = new this.userModel({
       username,
       email,
@@ -71,14 +97,9 @@ export class AuthService {
 
     await user.save();
 
-    // Send welcome email with credentials
     await this.emailService.sendWelcomeEmail(email, username, plainPassword);
 
-    // Return user without password
-    const savedUser = await this.userModel
-      .findById(user._id)
-      .select("-password");
-    return savedUser;
+    return this.userModel.findById(user._id).select("-password");
   }
 
   async updateUser(
@@ -137,7 +158,6 @@ export class AuthService {
       throw new NotFoundException("User not found");
     }
 
-    // Prevent deleting the last admin
     if (user.role === "admin") {
       const adminCount = await this.userModel.countDocuments({ role: "admin" });
       if (adminCount <= 1) {
@@ -148,10 +168,9 @@ export class AuthService {
     await this.userModel.findByIdAndDelete(userId);
   }
 
-  async login(loginDto: LoginDto): Promise<AuthResponse> {
+  async login(loginDto: LoginDto): Promise<LoginResult> {
     const { usernameOrEmail, password } = loginDto;
 
-    // Find user by username or email
     const user = await this.userModel.findOne({
       $or: [
         { username: usernameOrEmail },
@@ -172,6 +191,282 @@ export class AuthService {
     if (!isPasswordValid) {
       throw new UnauthorizedException("Invalid credentials");
     }
+
+    // First-login enforcement: return token but signal forced setup
+    if (user.mustChangePassword || user.mustChangeEmail) {
+      const tokenResponse = this.generateTokenResponse(user);
+      return {
+        status: "FIRST_LOGIN_REQUIRED",
+        ...tokenResponse,
+      };
+    }
+
+    // 2FA check
+    const enabledMethods: ("emailOtp" | "totp")[] = [];
+    if (user.twoFactor?.emailOtpEnabled) enabledMethods.push("emailOtp");
+    if (user.twoFactor?.totpEnabled) enabledMethods.push("totp");
+
+    if (enabledMethods.length > 0) {
+      const challengeId = this.generateChallengeId();
+      challengeStore.set(challengeId, {
+        userId: user._id.toString(),
+        methods: enabledMethods,
+        expiresAt: new Date(Date.now() + CHALLENGE_TTL_MS),
+        totpAttempts: 0,
+      });
+      return {
+        status: "TWO_FACTOR_REQUIRED",
+        challengeId,
+        methods: enabledMethods,
+      };
+    }
+
+    return {
+      status: "SUCCESS",
+      ...this.generateTokenResponse(user),
+    };
+  }
+
+  async sendEmailOtp(challengeId: string): Promise<void> {
+    const challenge = challengeStore.get(challengeId);
+    if (!challenge || challenge.expiresAt < new Date()) {
+      throw new UnauthorizedException("Invalid or expired challenge");
+    }
+
+    if (!challenge.methods.includes("emailOtp")) {
+      throw new BadRequestException("Email OTP not enabled for this challenge");
+    }
+
+    const user = await this.userModel.findById(challenge.userId);
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const hash = await bcrypt.hash(code, 10);
+
+    user.twoFactor.emailOtpCodeHash = hash;
+    user.twoFactor.emailOtpExpiresAt = new Date(Date.now() + EMAIL_OTP_TTL_MS);
+    user.twoFactor.emailOtpAttempts = 0;
+    user.markModified("twoFactor");
+    await user.save();
+
+    await this.emailService.sendOtpEmail(user.email, user.username, code);
+  }
+
+  async verify2fa(dto: Verify2faDto): Promise<LoginResult> {
+    const challenge = challengeStore.get(dto.challengeId);
+    if (!challenge || challenge.expiresAt < new Date()) {
+      throw new UnauthorizedException("Invalid or expired challenge");
+    }
+
+    if (!challenge.methods.includes(dto.method)) {
+      throw new BadRequestException("Method not allowed for this challenge");
+    }
+
+    const user = await this.userModel.findById(challenge.userId);
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+
+    if (dto.method === "emailOtp") {
+      await this.verifyEmailOtpCode(user, dto.code);
+    } else {
+      this.verifyTotpCode(user, dto.code, challenge);
+    }
+
+    challengeStore.delete(dto.challengeId);
+
+    return {
+      status: "SUCCESS",
+      ...this.generateTokenResponse(user),
+    };
+  }
+
+  private async verifyEmailOtpCode(
+    user: UserDocument,
+    code: string
+  ): Promise<void> {
+    if (
+      !user.twoFactor?.emailOtpCodeHash ||
+      !user.twoFactor?.emailOtpExpiresAt
+    ) {
+      throw new BadRequestException(
+        "No OTP sent. Please request a new code first."
+      );
+    }
+
+    if (user.twoFactor.emailOtpExpiresAt < new Date()) {
+      throw new BadRequestException("OTP has expired. Please request a new code.");
+    }
+
+    if (user.twoFactor.emailOtpAttempts >= MAX_OTP_ATTEMPTS) {
+      throw new BadRequestException(
+        "Too many failed attempts. Please request a new code."
+      );
+    }
+
+    const isValid = await bcrypt.compare(code, user.twoFactor.emailOtpCodeHash);
+
+    if (!isValid) {
+      user.twoFactor.emailOtpAttempts += 1;
+      user.markModified("twoFactor");
+      await user.save();
+      const remaining = MAX_OTP_ATTEMPTS - user.twoFactor.emailOtpAttempts;
+      throw new BadRequestException(
+        `Invalid OTP code.${remaining > 0 ? ` ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.` : " Please request a new code."}`
+      );
+    }
+
+    // Clear OTP state after success
+    user.twoFactor.emailOtpCodeHash = null;
+    user.twoFactor.emailOtpExpiresAt = null;
+    user.twoFactor.emailOtpAttempts = 0;
+    user.markModified("twoFactor");
+    await user.save();
+  }
+
+  private verifyTotpCode(
+    user: UserDocument,
+    code: string,
+    challenge: AuthChallenge
+  ): void {
+    if (!user.twoFactor?.totpSecret) {
+      throw new BadRequestException("TOTP not configured");
+    }
+
+    if (challenge.totpAttempts >= MAX_OTP_ATTEMPTS) {
+      throw new UnauthorizedException(
+        "Too many failed attempts. Please log in again."
+      );
+    }
+
+    const result = verifySync({
+      token: code,
+      secret: user.twoFactor.totpSecret,
+    });
+
+    if (!result || !result.valid) {
+      challenge.totpAttempts += 1;
+      const remaining = MAX_OTP_ATTEMPTS - challenge.totpAttempts;
+      if (remaining <= 0) {
+        // Invalidate the challenge so the user must restart login
+        challengeStore.delete(
+          [...challengeStore.entries()].find(([, v]) => v === challenge)?.[0] ?? ""
+        );
+        throw new UnauthorizedException(
+          "Too many failed attempts. Please log in again."
+        );
+      }
+      throw new BadRequestException(
+        `Invalid TOTP code. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`
+      );
+    }
+  }
+
+  async generateTotpSetup(
+    userId: string
+  ): Promise<{ secret: string; otpauthUrl: string; qrDataUrl: string }> {
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new NotFoundException("User not found");
+
+    const secret = generateSecret();
+    const otpauthUrl = generateURI({
+      label: user.email,
+      issuer: "PM2 Dashboard",
+      secret,
+    });
+
+    const QRCode = await import("qrcode");
+    const qrDataUrl = await QRCode.toDataURL(otpauthUrl);
+
+    // Store pending secret (not yet enabled — enabled after verify)
+    user.twoFactor.totpSecret = secret;
+    user.markModified("twoFactor");
+    await user.save();
+
+    return { secret, otpauthUrl, qrDataUrl };
+  }
+
+  async enableTotp(userId: string, dto: TotpSetupDto): Promise<void> {
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new NotFoundException("User not found");
+
+    if (!user.twoFactor?.totpSecret) {
+      throw new BadRequestException(
+        "TOTP setup not initiated. Call /auth/2fa/totp/setup first."
+      );
+    }
+
+    const result = verifySync({
+      token: dto.code,
+      secret: user.twoFactor.totpSecret,
+    });
+
+    if (!result || !result.valid) {
+      throw new UnauthorizedException(
+        "Invalid TOTP code. Please scan the QR code again."
+      );
+    }
+
+    user.twoFactor.totpEnabled = true;
+    user.markModified("twoFactor");
+    await user.save();
+  }
+
+  async update2faSettings(
+    userId: string,
+    dto: Update2faSettingsDto
+  ): Promise<void> {
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new NotFoundException("User not found");
+
+    if (dto.emailOtpEnabled !== undefined) {
+      user.twoFactor.emailOtpEnabled = dto.emailOtpEnabled;
+    }
+
+    if (dto.totpEnabled !== undefined) {
+      if (dto.totpEnabled && !user.twoFactor?.totpSecret) {
+        throw new BadRequestException(
+          "TOTP must be set up and verified before enabling. Use /auth/2fa/totp/setup and /auth/2fa/totp/enable first."
+        );
+      }
+      user.twoFactor.totpEnabled = dto.totpEnabled;
+      if (!dto.totpEnabled) {
+        // Wipe secret when disabled
+        user.twoFactor.totpSecret = null;
+      }
+    }
+
+    user.markModified("twoFactor");
+    await user.save();
+  }
+
+  async completeFirstLogin(
+    userId: string,
+    dto: FirstLoginSetupDto
+  ): Promise<AuthResponse> {
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new NotFoundException("User not found");
+
+    if (!user.mustChangePassword && !user.mustChangeEmail) {
+      throw new BadRequestException("First login already completed");
+    }
+
+    // Validate new email uniqueness
+    const existingEmail = await this.userModel.findOne({
+      email: dto.newEmail,
+      _id: { $ne: userId },
+    });
+    if (existingEmail) {
+      throw new ConflictException("Email already taken");
+    }
+
+    user.password = await bcrypt.hash(dto.newPassword, 10);
+    user.email = dto.newEmail;
+    user.mustChangePassword = false;
+    user.mustChangeEmail = false;
+    await user.save();
 
     return this.generateTokenResponse(user);
   }
@@ -258,6 +553,9 @@ export class AuthService {
         email: "admin@pm2dashboard.local",
         password: hashedPassword,
         role: "admin",
+        mustChangePassword: true,
+        mustChangeEmail: true,
+        isDefaultAdmin: true,
       });
       await admin.save();
       console.log(
@@ -280,6 +578,12 @@ export class AuthService {
         username: user.username,
         email: user.email,
         role: user.role,
+        mustChangePassword: user.mustChangePassword,
+        mustChangeEmail: user.mustChangeEmail,
+        twoFactor: {
+          emailOtpEnabled: user.twoFactor?.emailOtpEnabled ?? false,
+          totpEnabled: user.twoFactor?.totpEnabled ?? false,
+        },
       },
     };
   }

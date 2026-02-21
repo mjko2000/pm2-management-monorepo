@@ -26,6 +26,9 @@ A modern, feature-rich web-based dashboard for managing PM2 processes with GitHu
 - **Email Notifications**: Welcome emails sent automatically when users are created
 - **Profile Management**: Users can update their profile and change passwords
 - **Team Management**: Admin dashboard for managing all users
+- **Forced First-Login Setup**: Default admin (`admin`/`admin`) is required to set a new password and real email address before accessing the dashboard
+- **Two-Factor Authentication (2FA)**: Optional Email OTP and TOTP (authenticator app) support, configurable per user from profile settings
+- **Staged Login Flow**: Credentials → optional 2FA challenge → dashboard access
 
 ### 🎯 Service Management
 
@@ -136,7 +139,9 @@ The application will be available at:
 **Default Admin Credentials:**
 
 - Username: `admin`
-- Password: `admin` (change immediately after first login)
+- Password: `admin`
+
+> **First login is enforced.** You will be redirected to the Profile page to set a new password and email address before the dashboard is accessible.
 
 ---
 
@@ -338,9 +343,37 @@ sudo systemctl reload nginx
 ### First Time Setup
 
 1. **Login**: Use default admin credentials (`admin`/`admin`)
-2. **Change Password**: Go to Profile page and update your password
-3. **Add GitHub Token**: Navigate to GitHub Tokens and add your first token
-4. **Create Service**: Go to Services and create your first service
+2. **Complete Account Setup**: You will be automatically redirected to the Profile page and must set a new password and a real email address before accessing the dashboard
+3. **Enable 2FA** _(optional)_: After setup, go to **Profile → Two-Factor Authentication** to enable Email OTP or an authenticator app
+4. **Add GitHub Token**: Navigate to GitHub Tokens and add your first token
+5. **Create Service**: Go to Services and create your first service
+
+### Two-Factor Authentication (2FA)
+
+2FA is optional and can be enabled per user from the **Profile Settings** page.
+
+#### Email OTP
+
+1. Go to **Profile → Two-Factor Authentication**
+2. Toggle **Email OTP** on
+3. On next login, after entering your password you will receive a 6-digit code at your registered email — enter it to complete sign-in
+4. Codes expire after **5 minutes**; up to **5 incorrect attempts** are allowed before you must request a new code
+
+#### Authenticator App (TOTP)
+
+Compatible with Google Authenticator, Authy, 1Password, and any standard TOTP app.
+
+1. Go to **Profile → Two-Factor Authentication**
+2. Click **Set up** next to _Authenticator App_
+3. Scan the displayed QR code (or enter the secret manually)
+4. Enter the 6-digit code from your app to confirm
+5. Click **Enable** — TOTP is now active
+6. On next login, you will be prompted for the current code from your app
+7. Up to **5 incorrect attempts** are allowed before the session is invalidated and you must log in again
+
+#### Using Both Methods
+
+If both Email OTP and TOTP are enabled, you will be prompted to choose your preferred method on each login.
 
 ### Creating a Service
 
@@ -555,6 +588,8 @@ pm2-dashboard/
 - [Nodemailer](https://nodemailer.com/) - Email service
 - [Octokit](https://github.com/octokit/rest.js) - GitHub API client
 - [PM2](https://pm2.keymetrics.io/) - Process manager
+- [otplib](https://github.com/yeojz/otplib) - TOTP/HOTP generation and verification (RFC 6238)
+- [qrcode](https://github.com/soldair/node-qrcode) - QR code generation for TOTP setup
 
 **Frontend:**
 
@@ -572,12 +607,23 @@ pm2-dashboard/
 
 ### Authentication
 
-| Method | Endpoint                | Description      | Auth     |
-| ------ | ----------------------- | ---------------- | -------- |
-| `POST` | `/auth/login`           | User login       | Public   |
-| `GET`  | `/auth/me`              | Get current user | Required |
-| `PUT`  | `/auth/profile`         | Update profile   | Required |
-| `POST` | `/auth/change-password` | Change password  | Required |
+| Method | Endpoint                     | Description                                    | Auth     |
+| ------ | ---------------------------- | ---------------------------------------------- | -------- |
+| `POST` | `/auth/login`                | User login (staged — may return 2FA challenge) | Public   |
+| `GET`  | `/auth/me`                   | Get current user                               | Required |
+| `PUT`  | `/auth/profile`              | Update profile                                 | Required |
+| `POST` | `/auth/change-password`      | Change password                                | Required |
+| `POST` | `/auth/first-login/complete` | Set new password + email (first login)         | Required |
+
+### Two-Factor Authentication
+
+| Method | Endpoint                | Description                               | Auth     |
+| ------ | ----------------------- | ----------------------------------------- | -------- |
+| `POST` | `/auth/2fa/email/send`  | Send Email OTP to registered address      | Public   |
+| `POST` | `/auth/2fa/verify`      | Verify OTP or TOTP code and issue JWT     | Public   |
+| `POST` | `/auth/2fa/totp/setup`  | Generate TOTP secret and QR code          | Required |
+| `POST` | `/auth/2fa/totp/enable` | Confirm TOTP setup with verification code | Required |
+| `PUT`  | `/auth/2fa/settings`    | Enable or disable Email OTP / TOTP        | Required |
 
 ### User Management (Admin Only)
 
@@ -728,6 +774,10 @@ npm run init:db          # Initialize database (create default admin)
 - ✅ Role-based access control (Admin/User)
 - ✅ Service-level permissions (Private/Public)
 - ✅ Protected API endpoints with guards
+- ✅ Forced first-login password and email change for default admin
+- ✅ Two-factor authentication — Email OTP (bcrypt-hashed, 5 min TTL) and TOTP (RFC 6238)
+- ✅ 2FA attempt limiting (5 max per challenge) with automatic challenge invalidation
+- ✅ Short-lived 2FA challenge store (10 min TTL) with periodic cleanup
 
 ### Best Practices
 
@@ -742,7 +792,8 @@ npm run init:db          # Initialize database (create default admin)
 
 ### Production Checklist
 
-- [ ] Change default admin password
+- [ ] Complete first-login setup (change default admin password and email)
+- [ ] Enable 2FA on admin account (Email OTP and/or TOTP)
 - [ ] Set strong `JWT_SECRET`
 - [ ] Configure HTTPS/SSL
 - [ ] Set up proper MongoDB authentication
@@ -929,6 +980,33 @@ sudo chmod 440 /etc/sudoers.d/pm2-dashboard
 </details>
 
 <details>
+<summary><b>Two-Factor Authentication Issues</b></summary>
+
+**Email OTP not arriving:**
+
+- Verify SMTP credentials are configured in `.env` (`SMTP_USER`, `SMTP_PASS`)
+- Check backend logs — if SMTP is unconfigured the code is printed to the console as a fallback
+- Codes expire after **5 minutes**; click _Resend code_ to generate a new one
+
+**TOTP code rejected:**
+
+- Ensure your device clock is accurate (TOTP is time-based; clock drift > 30s causes failures)
+- Scan the QR code again from **Profile → Two-Factor Authentication → Set up** — a new secret is generated each time
+- Make sure you are entering the code for the correct account in your authenticator app
+
+**Locked out after 5 failed attempts:**
+
+- Email OTP: click _Resend code_ on the login page to reset the attempt counter with a fresh code
+- TOTP: the challenge is invalidated after 5 failures — return to the login page and sign in again
+
+**Can't complete first-login setup:**
+
+- The new email must not already be registered to another account
+- Password must be at least 6 characters
+
+</details>
+
+<details>
 <summary><b>Webhook/CI-CD Issues</b></summary>
 
 **Webhook not triggering deployments:**
@@ -1020,6 +1098,7 @@ For issues and questions:
 - [x] Automatic SSL certificates (Let's Encrypt)
 - [x] Cloudflare proxy support
 - [x] GitHub Webhooks for CI/CD (auto-deploy on push)
+- [x] Two-factor authentication (Email OTP + TOTP)
 - [ ] WebSocket support for real-time updates
 - [ ] Docker containerization
 - [ ] Kubernetes integration
@@ -1029,7 +1108,6 @@ For issues and questions:
 - [ ] Multi-server support
 - [ ] API rate limiting
 - [ ] Audit logs
-- [ ] Two-factor authentication
 
 ---
 
