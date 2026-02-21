@@ -19,6 +19,12 @@ import {
   UpdateUserDto,
   UpdateProfileDto,
   ChangePasswordDto,
+  FirstLoginSetupDto,
+  Verify2faDto,
+  SendEmailOtpDto,
+  TotpSetupDto,
+  Update2faSettingsDto,
+  LoginResult,
   AuthResponse,
 } from "./dto/auth.dto";
 import { Public } from "./decorators/public.decorator";
@@ -35,9 +41,74 @@ export class AuthController {
   @Public()
   @Post("login")
   @HttpCode(HttpStatus.OK)
-  async login(@Body() loginDto: LoginDto): Promise<AuthResponse> {
+  async login(@Body() loginDto: LoginDto): Promise<LoginResult> {
     return this.authService.login(loginDto);
   }
+
+  // ── First-login ──────────────────────────────────────────────────────────────
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post("first-login/complete")
+  @HttpCode(HttpStatus.OK)
+  async completeFirstLogin(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: FirstLoginSetupDto
+  ): Promise<AuthResponse> {
+    return this.authService.completeFirstLogin(user.userId, dto);
+  }
+
+  // ── 2FA challenge (public — no JWT yet) ─────────────────────────────────────
+
+  @Public()
+  @Post("2fa/email/send")
+  @HttpCode(HttpStatus.OK)
+  async sendEmailOtp(@Body() dto: SendEmailOtpDto): Promise<{ sent: boolean }> {
+    await this.authService.sendEmailOtp(dto.challengeId);
+    return { sent: true };
+  }
+
+  @Public()
+  @Post("2fa/verify")
+  @HttpCode(HttpStatus.OK)
+  async verify2fa(@Body() dto: Verify2faDto): Promise<LoginResult> {
+    return this.authService.verify2fa(dto);
+  }
+
+  // ── 2FA management (authenticated) ──────────────────────────────────────────
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post("2fa/totp/setup")
+  @HttpCode(HttpStatus.OK)
+  async setupTotp(@CurrentUser() user: CurrentUserPayload) {
+    return this.authService.generateTotpSetup(user.userId);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post("2fa/totp/enable")
+  @HttpCode(HttpStatus.OK)
+  async enableTotp(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: TotpSetupDto
+  ): Promise<{ enabled: boolean }> {
+    await this.authService.enableTotp(user.userId, dto);
+    return { enabled: true };
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Put("2fa/settings")
+  async update2faSettings(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: Update2faSettingsDto
+  ): Promise<{ updated: boolean }> {
+    await this.authService.update2faSettings(user.userId, dto);
+    return { updated: true };
+  }
+
+  // ── Profile ──────────────────────────────────────────────────────────────────
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
@@ -49,6 +120,12 @@ export class AuthController {
       username: fullUser.username,
       email: fullUser.email,
       role: fullUser.role,
+      mustChangePassword: fullUser.mustChangePassword,
+      mustChangeEmail: fullUser.mustChangeEmail,
+      twoFactor: {
+        emailOtpEnabled: fullUser.twoFactor?.emailOtpEnabled ?? false,
+        totpEnabled: fullUser.twoFactor?.totpEnabled ?? false,
+      },
     };
   }
 
@@ -82,6 +159,8 @@ export class AuthController {
     await this.authService.changePassword(user.userId, changePasswordDto);
     return { success: true, message: "Password changed successfully" };
   }
+
+  // ── Admin user management ────────────────────────────────────────────────────
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
@@ -123,7 +202,6 @@ export class AuthController {
   ) {
     this.requireAdmin(user);
 
-    // Prevent self-deletion
     if (user.userId === id) {
       throw new ForbiddenException("Cannot delete your own account");
     }

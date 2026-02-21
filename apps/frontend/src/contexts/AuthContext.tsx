@@ -5,21 +5,53 @@ import React, {
   useEffect,
   useCallback,
 } from "react";
+import { sendEmailOtp, verify2fa } from "../api/users";
 
 export interface User {
   id: string;
   username: string;
   email: string;
   role: string;
+  mustChangePassword?: boolean;
+  mustChangeEmail?: boolean;
+  twoFactor?: {
+    emailOtpEnabled: boolean;
+    totpEnabled: boolean;
+  };
 }
+
+export type LoginStage =
+  | "idle"
+  | "TWO_FACTOR_REQUIRED"
+  | "FIRST_LOGIN_REQUIRED";
+
+export interface TwoFactorChallenge {
+  challengeId: string;
+  methods: ("emailOtp" | "totp")[];
+}
+
+export type LoginResult =
+  | { stage: "idle" }
+  | { stage: "FIRST_LOGIN_REQUIRED" }
+  | { stage: "TWO_FACTOR_REQUIRED"; challengeId: string; methods: ("emailOtp" | "totp")[] };
 
 export interface AuthContextType {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (usernameOrEmail: string, password: string) => Promise<void>;
+  loginStage: LoginStage;
+  twoFactorChallenge: TwoFactorChallenge | null;
+  login: (usernameOrEmail: string, password: string) => Promise<LoginResult>;
+  sendOtp: (challengeId: string) => Promise<void>;
+  verifyTwoFactor: (
+    challengeId: string,
+    method: "emailOtp" | "totp",
+    code: string
+  ) => Promise<void>;
+  cancelChallenge: () => void;
   logout: () => void;
+  setTokenAndUser: (token: string, user: User) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,17 +60,18 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(() => {
-    return localStorage.getItem("auth_token");
-  });
+  const [token, setToken] = useState<string | null>(() =>
+    localStorage.getItem("auth_token")
+  );
   const [isLoading, setIsLoading] = useState(true);
+  const [loginStage, setLoginStage] = useState<LoginStage>("idle");
+  const [twoFactorChallenge, setTwoFactorChallenge] =
+    useState<TwoFactorChallenge | null>(null);
 
   const fetchCurrentUser = useCallback(async (authToken: string) => {
     try {
       const response = await fetch(`${API_URL}/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-        },
+        headers: { Authorization: `Bearer ${authToken}` },
       });
 
       if (response.ok) {
@@ -46,14 +79,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(userData);
         return true;
       } else {
-        // Token is invalid
         localStorage.removeItem("auth_token");
         setToken(null);
         setUser(null);
         return false;
       }
-    } catch (error) {
-      console.error("Failed to fetch user:", error);
+    } catch {
       localStorage.removeItem("auth_token");
       setToken(null);
       setUser(null);
@@ -68,16 +99,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       setIsLoading(false);
     };
-
     initAuth();
   }, [token, fetchCurrentUser]);
 
-  const login = async (usernameOrEmail: string, password: string) => {
+  const setTokenAndUser = useCallback((newToken: string, newUser: User) => {
+    localStorage.setItem("auth_token", newToken);
+    setToken(newToken);
+    setUser(newUser);
+    setLoginStage("idle");
+    setTwoFactorChallenge(null);
+  }, []);
+
+  const login = async (
+    usernameOrEmail: string,
+    password: string
+  ): Promise<LoginResult> => {
     const response = await fetch(`${API_URL}/auth/login`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ usernameOrEmail, password }),
     });
 
@@ -87,15 +126,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const data = await response.json();
+
+    if (data.status === "TWO_FACTOR_REQUIRED") {
+      setLoginStage("TWO_FACTOR_REQUIRED");
+      setTwoFactorChallenge({
+        challengeId: data.challengeId,
+        methods: data.methods,
+      });
+      // Return challenge data directly — caller must not read stale context state
+      return { stage: "TWO_FACTOR_REQUIRED", challengeId: data.challengeId, methods: data.methods };
+    }
+
+    if (data.status === "FIRST_LOGIN_REQUIRED") {
+      localStorage.setItem("auth_token", data.access_token);
+      setToken(data.access_token);
+      setUser(data.user);
+      setLoginStage("FIRST_LOGIN_REQUIRED");
+      return { stage: "FIRST_LOGIN_REQUIRED" };
+    }
+
+    // SUCCESS
     localStorage.setItem("auth_token", data.access_token);
     setToken(data.access_token);
     setUser(data.user);
+    setLoginStage("idle");
+    return { stage: "idle" };
+  };
+
+  const sendOtp = async (challengeId: string): Promise<void> => {
+    await sendEmailOtp(challengeId);
+  };
+
+  const verifyTwoFactor = async (
+    challengeId: string,
+    method: "emailOtp" | "totp",
+    code: string
+  ): Promise<void> => {
+    const data = await verify2fa({ challengeId, method, code });
+    localStorage.setItem("auth_token", data.access_token);
+    setToken(data.access_token);
+    setUser(data.user as User);
+    setLoginStage("idle");
+    setTwoFactorChallenge(null);
+  };
+
+  const cancelChallenge = () => {
+    setLoginStage("idle");
+    setTwoFactorChallenge(null);
   };
 
   const logout = () => {
     localStorage.removeItem("auth_token");
     setToken(null);
     setUser(null);
+    setLoginStage("idle");
+    setTwoFactorChallenge(null);
   };
 
   return (
@@ -105,8 +190,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         token,
         isAuthenticated: !!user && !!token,
         isLoading,
+        loginStage,
+        twoFactorChallenge,
         login,
+        sendOtp,
+        verifyTwoFactor,
+        cancelChallenge,
         logout,
+        setTokenAndUser,
       }}
     >
       {children}
@@ -121,4 +212,3 @@ export function useAuth() {
   }
   return context;
 }
-

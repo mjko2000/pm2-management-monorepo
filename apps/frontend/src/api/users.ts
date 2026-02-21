@@ -15,6 +15,12 @@ export interface UserProfile {
   username: string;
   email: string;
   role: string;
+  mustChangePassword?: boolean;
+  mustChangeEmail?: boolean;
+  twoFactor?: {
+    emailOtpEnabled: boolean;
+    totpEnabled: boolean;
+  };
 }
 
 export interface CreateUserDto {
@@ -42,6 +48,22 @@ export interface ChangePasswordDto {
   newPassword: string;
 }
 
+export interface FirstLoginSetupDto {
+  newPassword: string;
+  newEmail: string;
+}
+
+export interface Update2faSettingsDto {
+  emailOtpEnabled?: boolean;
+  totpEnabled?: boolean;
+}
+
+export interface TotpSetupResult {
+  secret: string;
+  otpauthUrl: string;
+  qrDataUrl: string;
+}
+
 export async function getUsers(): Promise<User[]> {
   return apiGet<User[]>("/auth/users");
 }
@@ -64,5 +86,33 @@ export async function updateProfile(data: UpdateProfileDto): Promise<UserProfile
 
 export async function changePassword(data: ChangePasswordDto): Promise<void> {
   return apiPost("/auth/change-password", data);
+}
+
+export async function completeFirstLogin(data: FirstLoginSetupDto): Promise<{ access_token: string; user: UserProfile }> {
+  return apiPost<{ access_token: string; user: UserProfile }>("/auth/first-login/complete", data);
+}
+
+export async function setupTotp(): Promise<TotpSetupResult> {
+  return apiPost<TotpSetupResult>("/auth/2fa/totp/setup");
+}
+
+export async function enableTotp(code: string): Promise<void> {
+  return apiPost("/auth/2fa/totp/enable", { code });
+}
+
+export async function update2faSettings(data: Update2faSettingsDto): Promise<void> {
+  return apiPut("/auth/2fa/settings", data);
+}
+
+export async function sendEmailOtp(challengeId: string): Promise<void> {
+  return apiPost("/auth/2fa/email/send", { challengeId });
+}
+
+export async function verify2fa(data: {
+  challengeId: string;
+  method: "emailOtp" | "totp";
+  code: string;
+}): Promise<{ access_token: string; user: UserProfile }> {
+  return apiPost<{ access_token: string; user: UserProfile }>("/auth/2fa/verify", data);
 }
 

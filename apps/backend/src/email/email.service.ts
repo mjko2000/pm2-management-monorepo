@@ -136,6 +136,74 @@ This is an automated message. Please do not reply to this email.
     }
   }
 
+  async sendOtpEmail(
+    email: string,
+    username: string,
+    code: string
+  ): Promise<void> {
+    const appName = this.configService.get<string>("APP_NAME", "PM2 Dashboard");
+
+    const mailOptions = {
+      from: this.configService.get<string>(
+        "SMTP_FROM",
+        `"${appName}" <noreply@example.com>`
+      ),
+      to: email,
+      subject: `${appName} - Your Login Verification Code`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: #1976d2; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+            .content { background: #f5f5f5; padding: 30px; border-radius: 0 0 8px 8px; }
+            .otp-box { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; border: 2px solid #1976d2; }
+            .otp-code { font-size: 2.5rem; font-weight: bold; letter-spacing: 0.4em; color: #1976d2; font-family: monospace; }
+            .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+            .warning { background: #fff3e0; padding: 15px; border-radius: 4px; margin-top: 20px; color: #e65100; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header"><h1>${appName}</h1></div>
+            <div class="content">
+              <h2>Verification Code</h2>
+              <p>Hello ${username}, use the code below to complete your login.</p>
+              <div class="otp-box">
+                <p class="otp-code">${code}</p>
+              </div>
+              <div class="warning">
+                <strong>⚠️</strong> This code expires in 5 minutes. Do not share it with anyone.
+              </div>
+            </div>
+            <div class="footer">
+              <p>If you didn't request this code, please secure your account immediately.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+      text: `${appName} Verification Code\n\nHello ${username},\n\nYour login verification code is: ${code}\n\nThis code expires in 5 minutes. Do not share it with anyone.\n\nIf you didn't request this, please secure your account.`,
+    };
+
+    if (!this.isConfigured || !this.transporter) {
+      console.warn(
+        `[OTP] Email service not configured — OTP code for ${email}: ${code}`
+      );
+      return;
+    }
+
+    try {
+      await this.transporter.sendMail(mailOptions);
+      console.log(`OTP email sent to ${email}`);
+    } catch (error) {
+      console.error("Failed to send OTP email:", error.message);
+    }
+  }
+
   async sendPasswordResetEmail(
     email: string,
     username: string,

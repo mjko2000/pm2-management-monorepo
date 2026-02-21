@@ -7,7 +7,7 @@ interface ProtectedRouteProps {
 }
 
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user, loginStage } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -30,6 +30,11 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  // Users with unresolved first-login flags are restricted to /profile
+  const requiresFirstLogin = user?.mustChangePassword || user?.mustChangeEmail || loginStage === "FIRST_LOGIN_REQUIRED";
+  if (requiresFirstLogin && location.pathname !== "/profile") {
+    return <Navigate to="/profile?firstLogin=1" replace />;
+  }
+
   return <>{children}</>;
 }
-
