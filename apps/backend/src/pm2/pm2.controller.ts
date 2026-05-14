@@ -11,13 +11,23 @@ import {
   Query,
   UseGuards,
 } from "@nestjs/common";
+import {
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsInt,
+  IsIn,
+  IsObject,
+  IsArray,
+  Matches,
+  MaxLength,
+  MinLength,
+  Min,
+  Max,
+} from "class-validator";
 import { ApiBearerAuth } from "@nestjs/swagger";
 import { PM2Service } from "./pm2.service";
-import {
-  PM2Service as IPM2Service,
-  Environment,
-  ServiceType,
-} from "@pm2-dashboard/shared";
+import { Environment } from "@pm2-dashboard/shared";
 import { Service } from "@/schemas/service.schema";
 import { JwtAuthGuard } from "@/auth/guards/jwt-auth.guard";
 import {
@@ -25,60 +35,273 @@ import {
   CurrentUserPayload,
 } from "@/auth/decorators/current-user.decorator";
 
+// Defense-in-depth: even though we now spawn via execFile (no shell), reject
+// strings that contain shell metacharacters in case a future change reverts to
+// exec() with string interpolation.
+const NO_SHELL_METACHARS = /^(?:(?![;|&`\n\r]|\$\().)*$/;
+const NO_SHELL_METACHARS_MSG =
+  "must not contain shell metacharacters (;, |, &, `, $( or newlines)";
+
+// PM2 process name allowed charset (alphanumeric, dash, underscore, dot).
+const SERVICE_NAME_REGEX = /^[a-zA-Z0-9._-]+$/;
+
 // DTOs for requests
-class CreateServiceDto
-  implements Omit<IPM2Service, "_id" | "status" | "pm2AppName">
-{
+class CreateServiceDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(48)
+  @Matches(SERVICE_NAME_REGEX, {
+    message: "name may only contain letters, numbers, dot, dash, underscore",
+  })
   name: string;
+
+  @IsString()
+  @MaxLength(2048)
   repositoryUrl: string;
+
+  @IsString()
+  @MaxLength(255)
+  @Matches(/^[A-Za-z0-9._/-]+$/, {
+    message:
+      "branch may only contain letters, numbers, dot, slash, dash, underscore",
+  })
   branch: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1024)
+  @Matches(NO_SHELL_METACHARS, { message: `script ${NO_SHELL_METACHARS_MSG}` })
   script?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
   sourceDirectory?: string;
+
+  @IsOptional()
+  @IsBoolean()
   useNpm?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  @Matches(NO_SHELL_METACHARS, {
+    message: `npmScript ${NO_SHELL_METACHARS_MSG}`,
+  })
   npmScript?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  @Matches(NO_SHELL_METACHARS, { message: `npmArgs ${NO_SHELL_METACHARS_MSG}` })
   npmArgs?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  @Matches(NO_SHELL_METACHARS, { message: `args ${NO_SHELL_METACHARS_MSG}` })
   args?: string;
+
+  @IsArray()
   environments: Environment[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
   activeEnvironment?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
   nodeVersion?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1024)
   repoPath?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(64)
   cluster?: number | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
   githubTokenId?: string;
+
+  @IsOptional()
+  @IsIn(["private", "public"])
   visibility?: "private" | "public";
-  serviceType?: ServiceType;
+
+  @IsOptional()
+  @IsIn(["node", "static"])
+  serviceType?: "node" | "static";
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
   outputDirectory?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(65535)
   port?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  autostart?: boolean;
+
+  @IsOptional()
+  @IsIn(["yarn", "npm", "pnpm"])
+  packageManager?: "yarn" | "npm" | "pnpm";
 }
 
-class UpdateServiceDto implements Partial<IPM2Service> {
+class UpdateServiceDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(48)
+  @Matches(SERVICE_NAME_REGEX, {
+    message: "name may only contain letters, numbers, dot, dash, underscore",
+  })
   name?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
   repositoryUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  @Matches(/^[A-Za-z0-9._/-]+$/, {
+    message:
+      "branch may only contain letters, numbers, dot, slash, dash, underscore",
+  })
   branch?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1024)
+  @Matches(NO_SHELL_METACHARS, { message: `script ${NO_SHELL_METACHARS_MSG}` })
   script?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
   sourceDirectory?: string;
+
+  @IsOptional()
+  @IsBoolean()
   useNpm?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  @Matches(NO_SHELL_METACHARS, {
+    message: `npmScript ${NO_SHELL_METACHARS_MSG}`,
+  })
   npmScript?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  @Matches(NO_SHELL_METACHARS, { message: `npmArgs ${NO_SHELL_METACHARS_MSG}` })
   npmArgs?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  @Matches(NO_SHELL_METACHARS, { message: `args ${NO_SHELL_METACHARS_MSG}` })
   args?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
   nodeVersion?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1024)
   repoPath?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(64)
   cluster?: number | null;
+
+  @IsOptional()
+  @IsIn(["private", "public"])
   visibility?: "private" | "public";
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
   githubTokenId?: string;
-  serviceType?: ServiceType;
+
+  @IsOptional()
+  @IsIn(["node", "static"])
+  serviceType?: "node" | "static";
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
   outputDirectory?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(65535)
   port?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  autostart?: boolean;
+
+  @IsOptional()
+  @IsIn(["yarn", "npm", "pnpm"])
+  packageManager?: "yarn" | "npm" | "pnpm";
 }
 
 class EnvironmentDto implements Environment {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(64)
+  @Matches(/^[A-Za-z0-9._-]+$/, {
+    message: "name may only contain letters, numbers, dot, dash, underscore",
+  })
   name: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
   description?: string;
+
+  @IsObject()
   variables: Record<string, string>;
 }
 
 class UpdateEnvironmentDto implements Partial<Environment> {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(64)
+  @Matches(/^[A-Za-z0-9._-]+$/, {
+    message: "name may only contain letters, numbers, dot, dash, underscore",
+  })
   name?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
   description?: string;
+
+  @IsOptional()
+  @IsObject()
   variables?: Record<string, string>;
 }
 

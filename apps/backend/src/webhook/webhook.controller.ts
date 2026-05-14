@@ -11,6 +11,7 @@ import {
   Headers,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { Throttle } from "@nestjs/throttler";
 import { WebhookService } from "./webhook.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import {
@@ -28,6 +29,7 @@ export class WebhookController {
    * Public endpoint to receive GitHub push events
    */
   @Public()
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @Post("webhook/:deployKey")
   async handleGitHubWebhook(
     @Param("deployKey") deployKey: string,

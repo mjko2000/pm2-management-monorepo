@@ -1060,14 +1060,25 @@ export class PM2Service implements OnModuleInit {
       throw new Error("Service not found or not running");
     }
 
+    // Clamp the line count to a sane range so an oversized request can't
+    // exhaust memory or be smuggled as a shell-style argument.
+    const safeLines = Number.isFinite(lines)
+      ? Math.min(Math.max(Math.floor(lines), 1), 5000)
+      : 100;
+
     try {
       const util = require("util");
-      const { exec } = require("child_process");
-      const execPromise = util.promisify(exec);
+      const { execFile } = require("child_process");
+      const execFilePromise = util.promisify(execFile);
 
-      const { stdout } = await execPromise(
-        `pm2 logs "${service.pm2AppName}" --lines ${lines} --raw --nostream`
-      );
+      const { stdout } = await execFilePromise("pm2", [
+        "logs",
+        service.pm2AppName,
+        "--lines",
+        String(safeLines),
+        "--raw",
+        "--nostream",
+      ]);
       return stdout;
     } catch (error) {
       this.logger.error(

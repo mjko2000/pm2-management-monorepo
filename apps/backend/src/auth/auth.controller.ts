@@ -12,6 +12,7 @@ import {
   ForbiddenException,
 } from "@nestjs/common";
 import { ApiBearerAuth } from "@nestjs/swagger";
+import { Throttle } from "@nestjs/throttler";
 import { AuthService } from "./auth.service";
 import {
   LoginDto,
@@ -39,6 +40,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post("login")
   @HttpCode(HttpStatus.OK)
   async login(@Body() loginDto: LoginDto): Promise<LoginResult> {
@@ -61,6 +63,7 @@ export class AuthController {
   // ── 2FA challenge (public — no JWT yet) ─────────────────────────────────────
 
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post("2fa/email/send")
   @HttpCode(HttpStatus.OK)
   async sendEmailOtp(@Body() dto: SendEmailOtpDto): Promise<{ sent: boolean }> {
@@ -69,6 +72,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post("2fa/verify")
   @HttpCode(HttpStatus.OK)
   async verify2fa(@Body() dto: Verify2faDto): Promise<LoginResult> {
