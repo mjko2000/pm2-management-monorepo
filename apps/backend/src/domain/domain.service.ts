@@ -9,14 +9,15 @@ import { InjectModel } from "@nestjs/mongoose";
 import { Model, Types } from "mongoose";
 import { Domain, DomainDocument, DomainStatus } from "../schemas/domain.schema";
 import { Service } from "../schemas/service.schema";
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
 import * as dns from "dns";
 import * as fs from "fs";
 import * as path from "path";
+import * as crypto from "crypto";
 import { ConfigService as NestConfigService } from "@nestjs/config";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 const dnsResolve4 = promisify(dns.resolve4);
 
 export interface CreateDomainDto {
@@ -419,9 +420,29 @@ export class DomainService {
   }
 
   private isValidDomain(domain: string): boolean {
-    const domainRegex =
-      /^(?!:\/\/)([a-zA-Z0-9-_]+\.)*[a-zA-Z0-9][a-zA-Z0-9-_]+\.[a-zA-Z]{2,11}?$/;
-    return domainRegex.test(domain);
+    if (typeof domain !== "string") return false;
+
+    // RFC 1035: total length max 253 chars, label max 63 chars.
+    if (domain.length === 0 || domain.length > 253) return false;
+
+    // Must be at least one dot (TLD required).
+    if (!domain.includes(".")) return false;
+
+    // Each label: alphanumeric and hyphens, no leading/trailing hyphen.
+    // Hyphens are intentionally restricted to be safe in shell args even though
+    // we now use execFile - this is defense-in-depth.
+    const labelRegex = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/;
+    const labels = domain.split(".");
+    for (const label of labels) {
+      if (label.length === 0 || label.length > 63) return false;
+      if (!labelRegex.test(label)) return false;
+    }
+
+    // TLD must be alphabetic and 2-24 chars (covers all current TLDs).
+    const tld = labels[labels.length - 1];
+    if (!/^[a-zA-Z]{2,24}$/.test(tld)) return false;
+
+    return true;
   }
 
   private async createNginxConfig(domain: DomainDocument): Promise<void> {
@@ -448,13 +469,25 @@ export class DomainService {
       `${domain.domain}.conf`
     );
 
-    // Write config file using sudo
-    const tempPath = `/tmp/${domain.domain}.conf`;
-    fs.writeFileSync(tempPath, configContent);
+    // Write to a non-predictable temp path so other processes on the box can't
+    // race-replace the file before we move it into place.
+    const tempPath = path.join("/tmp", `nginx-${crypto.randomUUID()}.conf`);
+    fs.writeFileSync(tempPath, configContent, { mode: 0o600 });
 
-    await execAsync(`sudo mv ${tempPath} ${configPath}`);
-    await execAsync(`sudo chown root:root ${configPath}`);
-    await execAsync(`sudo chmod 644 ${configPath}`);
+    try {
+      await execFileAsync("sudo", ["mv", tempPath, configPath]);
+      await execFileAsync("sudo", ["chown", "root:root", configPath]);
+      await execFileAsync("sudo", ["chmod", "644", configPath]);
+    } finally {
+      // Best-effort cleanup if mv failed and the temp file still exists.
+      if (fs.existsSync(tempPath)) {
+        try {
+          fs.unlinkSync(tempPath);
+        } catch {
+          /* noop */
+        }
+      }
+    }
 
     this.logger.log(`Nginx config created at ${configPath}`);
   }
@@ -469,19 +502,19 @@ export class DomainService {
       `${domain.domain}.conf`
     );
 
-    await execAsync(`sudo ln -sf ${configPath} ${enabledPath}`);
+    await execFileAsync("sudo", ["ln", "-sf", configPath, enabledPath]);
 
     this.logger.log(`Nginx site enabled: ${enabledPath}`);
   }
 
   private async reloadNginx(): Promise<void> {
     // Test nginx configuration first
-    const { stderr: testError } = await execAsync("sudo nginx -t");
+    const { stderr: testError } = await execFileAsync("sudo", ["nginx", "-t"]);
     if (testError && testError.includes("failed")) {
       throw new Error(`Nginx configuration test failed: ${testError}`);
     }
 
-    await execAsync("sudo systemctl reload nginx");
+    await execFileAsync("sudo", ["systemctl", "reload", "nginx"]);
 
     this.logger.log("Nginx reloaded");
   }
@@ -491,9 +524,16 @@ export class DomainService {
       this.configService.get("CERTBOT_EMAIL") || `admin@${domain.domain}`;
 
     try {
-      const { stdout, stderr } = await execAsync(
-        `sudo certbot --nginx -d ${domain.domain} --non-interactive --agree-tos -m ${adminEmail}`
-      );
+      const { stderr } = await execFileAsync("sudo", [
+        "certbot",
+        "--nginx",
+        "-d",
+        domain.domain,
+        "--non-interactive",
+        "--agree-tos",
+        "-m",
+        adminEmail,
+      ]);
 
       if (stderr && stderr.includes("error")) {
         throw new Error(stderr);
@@ -519,10 +559,10 @@ export class DomainService {
 
     try {
       // Remove enabled symlink
-      await execAsync(`sudo rm -f ${enabledPath}`);
+      await execFileAsync("sudo", ["rm", "-f", enabledPath]);
 
       // Remove config file
-      await execAsync(`sudo rm -f ${configPath}`);
+      await execFileAsync("sudo", ["rm", "-f", configPath]);
 
       // Reload nginx
       await this.reloadNginx();

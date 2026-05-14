@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { MongooseModule } from "@nestjs/mongoose";
 import { APP_GUARD } from "@nestjs/core";
+import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
 import { GitHubModule } from "./github/github.module";
 import { PM2Module } from "./pm2/pm2.module";
 import { EnvironmentModule } from "./environment/environment.module";
@@ -29,6 +30,13 @@ import { WebhookModule } from "./webhook/webhook.module";
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    ThrottlerModule.forRoot([
+      {
+        name: "default",
+        ttl: 60_000,
+        limit: 60,
+      },
+    ]),
     MongooseModule.forRootAsync({
       useFactory: async () => ({
         uri:
@@ -56,6 +64,11 @@ import { WebhookModule } from "./webhook/webhook.module";
     PM2Service,
     GitHubService,
     AppConfigService,
+    // ThrottlerGuard runs before JwtAuthGuard so rate limits apply to anonymous traffic too.
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
