@@ -751,7 +751,10 @@ export class PM2Service implements OnModuleInit {
       const child = spawn(cmd, args, {
         cwd,
         stdio: ["ignore", "pipe", "pipe"],
-        env,
+        env: {
+          ...process.env,
+          ...env,
+        },
       });
 
       const tail: string[] = [];
