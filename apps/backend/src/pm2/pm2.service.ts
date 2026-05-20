@@ -45,7 +45,7 @@ export class PM2Service implements OnModuleInit {
     private serviceModel: Model<Service>,
     private logger: CustomLogger,
     @Inject(forwardRef(() => DomainService))
-    private domainService: DomainService
+    private domainService: DomainService,
   ) {
     this.logger.setContext("PM2Service");
     this.nvmDir = path.join(process.env.HOME, ".nvm", "versions", "node");
@@ -60,13 +60,13 @@ export class PM2Service implements OnModuleInit {
     try {
       const services = await this.serviceModel.find({ autostart: true }).exec();
       this.logger.log(
-        `Found ${services.length} services with autostart enabled`
+        `Found ${services.length} services with autostart enabled`,
       );
 
       for (const service of services) {
         if (!service.activeEnvironment) {
           this.logger.warn(
-            `Service ${service.name} has autostart enabled but no active environment set, skipping...`
+            `Service ${service.name} has autostart enabled but no active environment set, skipping...`,
           );
           continue;
         }
@@ -75,12 +75,12 @@ export class PM2Service implements OnModuleInit {
         try {
           await this.startService(service._id.toString());
           this.logger.log(
-            `Service ${service.name} started successfully (autostart)`
+            `Service ${service.name} started successfully (autostart)`,
           );
         } catch (error) {
           this.logger.error(
             `Failed to start service ${service.name} (autostart):`,
-            error
+            error,
           );
         }
       }
@@ -124,7 +124,7 @@ export class PM2Service implements OnModuleInit {
 
   async getService(
     user: CurrentUserPayload,
-    id: string
+    id: string,
   ): Promise<any | undefined> {
     const service = await this.serviceModel
       .findById(id)
@@ -162,7 +162,7 @@ export class PM2Service implements OnModuleInit {
   async checkServicePermission(
     user: CurrentUserPayload,
     serviceId: string,
-    operation: "read" | "write"
+    operation: "read" | "write",
   ): Promise<Service> {
     const service = await this.serviceModel.findById(serviceId).exec();
 
@@ -183,7 +183,7 @@ export class PM2Service implements OnModuleInit {
       // Write access: owner, public, or admin
       if (!isOwner && !isPublic && !isAdmin) {
         throw new ForbiddenException(
-          "You do not have permission to modify this service"
+          "You do not have permission to modify this service",
         );
       }
     }
@@ -196,7 +196,7 @@ export class PM2Service implements OnModuleInit {
       githubTokenId?: string;
       visibility?: string;
     },
-    userId: string
+    userId: string,
   ): Promise<Service> {
     const newService = await this.serviceModel.create({
       ...serviceData,
@@ -209,7 +209,7 @@ export class PM2Service implements OnModuleInit {
   async updateService(
     user: CurrentUserPayload,
     id: string,
-    serviceData: Partial<IPM2Service> & { githubTokenId?: string }
+    serviceData: Partial<IPM2Service> & { githubTokenId?: string },
   ): Promise<Service | undefined> {
     const service = await this.serviceModel.findById(id).exec();
 
@@ -224,7 +224,7 @@ export class PM2Service implements OnModuleInit {
 
     if (!isOwner && !isPublic && !isAdmin) {
       throw new ForbiddenException(
-        "You do not have permission to update this service"
+        "You do not have permission to update this service",
       );
     }
 
@@ -248,7 +248,7 @@ export class PM2Service implements OnModuleInit {
 
     if (!isOwner && !isAdmin) {
       throw new ForbiddenException(
-        "You do not have permission to delete this service"
+        "You do not have permission to delete this service",
       );
     }
 
@@ -269,7 +269,7 @@ export class PM2Service implements OnModuleInit {
     } catch (error) {
       this.logger.error(
         `Error removing repository for service ${service.name}:`,
-        error
+        error,
       );
       // Don't fail the deletion if repository removal fails
     }
@@ -280,7 +280,7 @@ export class PM2Service implements OnModuleInit {
     } catch (error) {
       this.logger.error(
         `Error deleting domains for service ${service.name}:`,
-        error
+        error,
       );
       // Don't fail the deletion if domain removal fails
     }
@@ -292,7 +292,7 @@ export class PM2Service implements OnModuleInit {
   private async removeServiceRepository(service: Service): Promise<void> {
     if (!service.repoPath) {
       this.logger.log(
-        `No repository path stored for service ${service.name}, skipping removal`
+        `No repository path stored for service ${service.name}, skipping removal`,
       );
       return;
     }
@@ -305,11 +305,11 @@ export class PM2Service implements OnModuleInit {
       await fs.promises.rm(service.repoPath, { recursive: true, force: true });
 
       this.logger.log(
-        `Repository folder ${service.repoPath} removed successfully`
+        `Repository folder ${service.repoPath} removed successfully`,
       );
     } else {
       this.logger.log(
-        `Repository folder ${service.repoPath} does not exist, skipping removal`
+        `Repository folder ${service.repoPath} does not exist, skipping removal`,
       );
     }
   }
@@ -327,11 +327,11 @@ export class PM2Service implements OnModuleInit {
 
     // Get active environment
     const env = service.environments.find(
-      (e) => e.name === service.activeEnvironment
+      (e) => e.name === service.activeEnvironment,
     );
     if (!env) {
       throw new Error(
-        `Environment ${service.activeEnvironment} not found for service ${service.name}`
+        `Environment ${service.activeEnvironment} not found for service ${service.name}`,
       );
     }
 
@@ -344,7 +344,7 @@ export class PM2Service implements OnModuleInit {
         const needsRecreation = await this.needsPM2ProcessRecreation(service);
         if (needsRecreation) {
           this.logger.log(
-            `Recreating PM2 process for ${service.name} due to configuration change`
+            `Recreating PM2 process for ${service.name} due to configuration change`,
           );
           await this.deletePM2ProcessByAppName(service.pm2AppName);
           service.pm2AppName = undefined;
@@ -358,7 +358,7 @@ export class PM2Service implements OnModuleInit {
       // Ensure repository is available (clone if not exists, pull if exists)
       if (!service.githubTokenId || !service.createdBy) {
         throw new Error(
-          "Service must have a GitHub token and creator assigned"
+          "Service must have a GitHub token and creator assigned",
         );
       }
       const repoPath = await this.ensureRepositoryAvailable(
@@ -367,7 +367,7 @@ export class PM2Service implements OnModuleInit {
         service.name,
         service.githubTokenId.toString(),
         service.createdBy.toString(),
-        service.repoPath
+        service.repoPath,
       );
 
       // Store the repository path in the service record
@@ -456,7 +456,7 @@ export class PM2Service implements OnModuleInit {
       const needsRecreation = await this.needsPM2ProcessRecreation(service);
       if (needsRecreation) {
         this.logger.log(
-          `Recreating PM2 process for ${service.name} during reload due to configuration change`
+          `Recreating PM2 process for ${service.name} during reload due to configuration change`,
         );
         await this.deletePM2ProcessByAppName(service.pm2AppName);
         service.pm2AppName = undefined;
@@ -468,18 +468,18 @@ export class PM2Service implements OnModuleInit {
 
       // Get active environment
       const env = service.environments.find(
-        (e) => e.name === service.activeEnvironment
+        (e) => e.name === service.activeEnvironment,
       );
       if (!env) {
         throw new Error(
-          `Environment ${service.activeEnvironment} not found for service ${service.name}`
+          `Environment ${service.activeEnvironment} not found for service ${service.name}`,
         );
       }
 
       // Pull latest changes from repository
       if (!service.githubTokenId || !service.createdBy) {
         throw new Error(
-          "Service must have a GitHub token and creator assigned"
+          "Service must have a GitHub token and creator assigned",
         );
       }
       const repoPath = await this.pullLatestChanges(
@@ -488,7 +488,7 @@ export class PM2Service implements OnModuleInit {
         service.name,
         service.githubTokenId.toString(),
         service.createdBy.toString(),
-        service.repoPath
+        service.repoPath,
       );
 
       // Store the repository path in the service record
@@ -506,7 +506,7 @@ export class PM2Service implements OnModuleInit {
         const pm2AppName = await this.startPM2Process(service, env, repoPath);
         service.pm2AppName = pm2AppName;
         this.logger.log(
-          `Service ${service.name} recreated successfully with new PM2 app name: ${pm2AppName}`
+          `Service ${service.name} recreated successfully with new PM2 app name: ${pm2AppName}`,
         );
       } else {
         // Use PM2 reload for zero-downtime restart
@@ -534,7 +534,7 @@ export class PM2Service implements OnModuleInit {
     serviceName: string,
     tokenId: string,
     userId: string,
-    existingRepoPath?: string
+    existingRepoPath?: string,
   ): Promise<string> {
     const repoPath =
       existingRepoPath ||
@@ -543,24 +543,24 @@ export class PM2Service implements OnModuleInit {
     // Check if repository already exists
     if (this.isRepositoryCloned(repoPath)) {
       this.logger.log(
-        `Repository already exists at ${repoPath}, pulling latest changes...`
+        `Repository already exists at ${repoPath}, pulling latest changes...`,
       );
       return this.githubService.pullRepositoryWithTokenId(
         repoPath,
         branch,
         tokenId,
-        userId
+        userId,
       );
     } else {
       this.logger.log(
-        `Repository not found at ${repoPath}, cloning from ${repoUrl}...`
+        `Repository not found at ${repoPath}, cloning from ${repoUrl}...`,
       );
       return this.githubService.cloneRepository(
         repoUrl,
         branch,
         tokenId,
         userId,
-        serviceName
+        serviceName,
       );
     }
   }
@@ -571,7 +571,7 @@ export class PM2Service implements OnModuleInit {
     serviceName: string,
     tokenId: string,
     userId: string,
-    existingRepoPath?: string
+    existingRepoPath?: string,
   ): Promise<string> {
     const repoPath =
       existingRepoPath ||
@@ -579,7 +579,7 @@ export class PM2Service implements OnModuleInit {
 
     if (!this.isRepositoryCloned(repoPath)) {
       throw new Error(
-        `Repository not found at ${repoPath}, cannot pull changes`
+        `Repository not found at ${repoPath}, cannot pull changes`,
       );
     }
 
@@ -587,13 +587,13 @@ export class PM2Service implements OnModuleInit {
       repoPath,
       branch,
       tokenId,
-      userId
+      userId,
     );
   }
 
   private async generateRepositoryPath(
     repoUrl: string,
-    serviceName: string
+    serviceName: string,
   ): Promise<string> {
     const workingDir = await this.configService.getWorkingDirectory();
     const repoName = this.extractRepoName(repoUrl);
@@ -612,7 +612,7 @@ export class PM2Service implements OnModuleInit {
   private async createEnvironmentFile(
     service: Service,
     env: Environment,
-    repoPath: string
+    repoPath: string,
   ): Promise<void> {
     const cwd = service.sourceDirectory
       ? path.join(repoPath, service.sourceDirectory)
@@ -634,7 +634,7 @@ export class PM2Service implements OnModuleInit {
 
   private async installAndBuild(
     service: Service,
-    repoPath: string
+    repoPath: string,
   ): Promise<void> {
     const cwd = service.sourceDirectory
       ? path.join(repoPath, service.sourceDirectory)
@@ -643,14 +643,14 @@ export class PM2Service implements OnModuleInit {
     // Determine which package manager to use (default to yarn for backwards compatibility)
     const packageManager = service.packageManager || "yarn";
     this.logger.log(
-      `Installing dependencies for ${service.name} using ${packageManager}...`
+      `Installing dependencies for ${service.name} using ${packageManager}...`,
     );
 
     let packageManagerPath: string = packageManager;
     if (service.nodeVersion) {
       packageManagerPath = `${this.nvmDir}/${service.nodeVersion}/bin/${packageManager}`;
       this.logger.log(
-        `Using Node.js version ${service.nodeVersion} for ${service.name}...`
+        `Using Node.js version ${service.nodeVersion} for ${service.name}...`,
       );
     }
 
@@ -660,25 +660,20 @@ export class PM2Service implements OnModuleInit {
       cwd,
       `${service.name}/install`,
       15 * 60_000,
-      // Force development NODE_ENV so devDependencies (next, typescript,
-      // tailwind, sentry-cli, etc.) are installed. The backend itself runs
-      // with NODE_ENV=production for Swagger gating; we only override for the
-      // child install command.
-      { NODE_ENV: "development" }
     );
 
     // For static sites, always run build since the output is required
     if (service.serviceType === "static") {
       try {
         this.logger.log(
-          `Building static site ${service.name} using ${packageManager}...`
+          `Building static site ${service.name} using ${packageManager}...`,
         );
         await this.runCommand(
           packageManagerPath,
           ["run", "build"],
           cwd,
           `${service.name}/build`,
-          20 * 60_000
+          20 * 60_000,
         );
 
         // Install serve globally using the appropriate node version
@@ -686,15 +681,13 @@ export class PM2Service implements OnModuleInit {
         if (service.nodeVersion) {
           npxPath = `${this.nvmDir}/${service.nodeVersion}/bin/npx`;
         }
-        this.logger.log(
-          `Ensuring serve is available for ${service.name}...`
-        );
+        this.logger.log(`Ensuring serve is available for ${service.name}...`);
         await this.runCommand(
           npxPath,
           ["--yes", "serve", "--version"],
           cwd,
           `${service.name}/serve-check`,
-          2 * 60_000
+          2 * 60_000,
         );
       } catch (error) {
         throw new Error(`Failed to build static site: ${error.message}`);
@@ -705,12 +698,12 @@ export class PM2Service implements OnModuleInit {
         const fs = require("fs");
         const packageJsonPath = path.join(cwd, "package.json");
         const packageJson = JSON.parse(
-          fs.readFileSync(packageJsonPath, "utf8")
+          fs.readFileSync(packageJsonPath, "utf8"),
         );
 
         if (packageJson.scripts?.build) {
           this.logger.log(
-            `Building ${service.name} using ${packageManager}...`
+            `Building ${service.name} using ${packageManager}...`,
           );
           // "run build" works for yarn, npm, and pnpm
           await this.runCommand(
@@ -718,7 +711,7 @@ export class PM2Service implements OnModuleInit {
             ["run", "build"],
             cwd,
             `${service.name}/build`,
-            20 * 60_000
+            20 * 60_000,
           );
         }
       } catch (error) {
@@ -736,23 +729,18 @@ export class PM2Service implements OnModuleInit {
    * message includes the last 50 lines of merged output so failures are
    * actionable without needing SSH access.
    */
+
   private runCommand(
     cmd: string,
     args: string[],
     cwd: string,
     label: string,
     timeoutMs = 10 * 60_000,
-    extraEnv?: Record<string, string>
   ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const child = spawn(cmd, args, {
         cwd,
-        // extraEnv last so callers can override anything (e.g. NODE_ENV).
-        env: { ...process.env, ...(extraEnv ?? {}) },
-        // Close stdin so postinstall scripts (husky, sentry-cli, prompts-based
-        // tools) can never hang waiting for input we won't send.
         stdio: ["ignore", "pipe", "pipe"],
-        // Note: shell:false (default) so cmd/args are not interpreted by sh.
       });
 
       const tail: string[] = [];
@@ -769,7 +757,7 @@ export class PM2Service implements OnModuleInit {
       const flushLines = (
         chunk: string,
         bufRef: { value: string },
-        emit: (line: string) => void
+        emit: (line: string) => void,
       ) => {
         bufRef.value += chunk;
         let idx: number;
@@ -788,20 +776,20 @@ export class PM2Service implements OnModuleInit {
 
       child.stdout?.on("data", (data: Buffer) =>
         flushLines(data.toString("utf8"), stdoutRef, (line) =>
-          this.logger.log(`[${label}] ${line}`)
-        )
+          this.logger.log(`[${label}] ${line}`),
+        ),
       );
       child.stderr?.on("data", (data: Buffer) =>
         flushLines(data.toString("utf8"), stderrRef, (line) =>
-          this.logger.warn(`[${label}] ${line}`)
-        )
+          this.logger.warn(`[${label}] ${line}`),
+        ),
       );
 
       const timer = setTimeout(() => {
         if (settled) return;
         settled = true;
         this.logger.error(
-          `[${label}] Command timed out after ${Math.round(timeoutMs / 1000)}s, killing process`
+          `[${label}] Command timed out after ${Math.round(timeoutMs / 1000)}s, killing process`,
         );
         try {
           child.kill("SIGKILL");
@@ -810,8 +798,8 @@ export class PM2Service implements OnModuleInit {
         }
         reject(
           new Error(
-            `${label} timed out after ${Math.round(timeoutMs / 1000)}s. Last output:\n${tail.join("\n")}`
-          )
+            `${label} timed out after ${Math.round(timeoutMs / 1000)}s. Last output:\n${tail.join("\n")}`,
+          ),
         );
       }, timeoutMs);
 
@@ -819,11 +807,7 @@ export class PM2Service implements OnModuleInit {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
-        reject(
-          new Error(
-            `${label} failed to spawn (${cmd}): ${err.message}`
-          )
-        );
+        reject(new Error(`${label} failed to spawn (${cmd}): ${err.message}`));
       });
 
       child.on("close", (code, signal) => {
@@ -846,8 +830,8 @@ export class PM2Service implements OnModuleInit {
         } else {
           reject(
             new Error(
-              `${label} exited with code ${code}${signal ? ` (signal ${signal})` : ""}. Last output:\n${tail.join("\n")}`
-            )
+              `${label} exited with code ${code}${signal ? ` (signal ${signal})` : ""}. Last output:\n${tail.join("\n")}`,
+            ),
           );
         }
       });
@@ -857,7 +841,7 @@ export class PM2Service implements OnModuleInit {
   private async startPM2Process(
     service: Service,
     env: Environment,
-    repoPath: string
+    repoPath: string,
   ): Promise<string> {
     const cwd = service.sourceDirectory
       ? path.join(repoPath, service.sourceDirectory)
@@ -894,7 +878,7 @@ export class PM2Service implements OnModuleInit {
       startConfig.exec_mode = "fork";
 
       this.logger.log(
-        `Serving static site ${service.name} from ${outputDir} on port ${port}`
+        `Serving static site ${service.name} from ${outputDir} on port ${port}`,
       );
     } else {
       // Node.js service: use cluster or fork mode
@@ -902,7 +886,7 @@ export class PM2Service implements OnModuleInit {
         startConfig.instances = service.cluster;
         startConfig.exec_mode = "cluster";
         this.logger.log(
-          `Using cluster mode with ${service.cluster} instances for ${service.name}`
+          `Using cluster mode with ${service.cluster} instances for ${service.name}`,
         );
       } else {
         startConfig.instances = 1;
@@ -912,7 +896,7 @@ export class PM2Service implements OnModuleInit {
       if (service.useNpm) {
         if (!service.npmScript) {
           throw new Error(
-            `No npm script specified for service ${service.name}`
+            `No npm script specified for service ${service.name}`,
           );
         }
         startConfig.script = npmPath;
@@ -924,12 +908,12 @@ export class PM2Service implements OnModuleInit {
     }
 
     this.logger.log(
-      `Starting PM2 process for ${service.name}... ${startConfig.script} ${startConfig.args}`
+      `Starting PM2 process for ${service.name}... ${startConfig.script} ${startConfig.args}`,
     );
     await start(startConfig);
 
     this.logger.log(
-      `Service ${service.name} started with PM2 app name: ${appName}`
+      `Service ${service.name} started with PM2 app name: ${appName}`,
     );
 
     await disconnect();
@@ -947,7 +931,7 @@ export class PM2Service implements OnModuleInit {
 
   async addEnvironment(
     serviceId: string,
-    environment: Environment
+    environment: Environment,
   ): Promise<Service | undefined> {
     const service = await this.serviceModel.findById(serviceId).exec();
     if (!service) {
@@ -957,7 +941,7 @@ export class PM2Service implements OnModuleInit {
     // Check if environment with same name already exists
     if (service.environments.some((e) => e.name === environment.name)) {
       throw new Error(
-        `Environment ${environment.name} already exists for service ${service.name}`
+        `Environment ${environment.name} already exists for service ${service.name}`,
       );
     }
 
@@ -975,7 +959,7 @@ export class PM2Service implements OnModuleInit {
   async updateEnvironment(
     serviceId: string,
     envName: string,
-    environment: Partial<Environment>
+    environment: Partial<Environment>,
   ): Promise<Service | undefined> {
     const service = await this.serviceModel.findById(serviceId).exec();
     if (!service) {
@@ -985,7 +969,7 @@ export class PM2Service implements OnModuleInit {
     const envIndex = service.environments.findIndex((e) => e.name === envName);
     if (envIndex === -1) {
       throw new Error(
-        `Environment ${envName} not found for service ${service.name}`
+        `Environment ${envName} not found for service ${service.name}`,
       );
     }
 
@@ -1009,7 +993,7 @@ export class PM2Service implements OnModuleInit {
 
   async deleteEnvironment(
     serviceId: string,
-    envName: string
+    envName: string,
   ): Promise<Service | undefined> {
     const service = await this.serviceModel.findById(serviceId).exec();
     if (!service) {
@@ -1019,7 +1003,7 @@ export class PM2Service implements OnModuleInit {
     const envIndex = service.environments.findIndex((e) => e.name === envName);
     if (envIndex === -1) {
       throw new Error(
-        `Environment ${envName} not found for service ${service.name}`
+        `Environment ${envName} not found for service ${service.name}`,
       );
     }
 
@@ -1039,7 +1023,7 @@ export class PM2Service implements OnModuleInit {
 
   async setActiveEnvironment(
     serviceId: string,
-    envName: string
+    envName: string,
   ): Promise<Service | undefined> {
     const service = await this.serviceModel.findById(serviceId).exec();
     if (!service) {
@@ -1049,7 +1033,7 @@ export class PM2Service implements OnModuleInit {
     // Check if the environment exists
     if (!service.environments.some((e) => e.name === envName)) {
       throw new Error(
-        `Environment ${envName} not found for service ${service.name}`
+        `Environment ${envName} not found for service ${service.name}`,
       );
     }
 
@@ -1084,10 +1068,10 @@ export class PM2Service implements OnModuleInit {
             // If any process is online, consider the service online
             // If all processes are stopped/errored, consider the service errored
             const hasOnlineProcess = appProcesses.some(
-              (p) => p.status === "online"
+              (p) => p.status === "online",
             );
             const allStopped = appProcesses.every(
-              (p) => p.status === "stopped"
+              (p) => p.status === "stopped",
             );
 
             if (hasOnlineProcess) {
@@ -1155,7 +1139,7 @@ export class PM2Service implements OnModuleInit {
       await disconnect();
 
       const serviceProcesses = processes.filter(
-        (p) => p.name === service.pm2AppName
+        (p) => p.name === service.pm2AppName,
       );
       if (serviceProcesses.length === 0) {
         return null;
@@ -1198,7 +1182,7 @@ export class PM2Service implements OnModuleInit {
     } catch (error) {
       this.logger.error(
         `Error getting metrics for service ${service.name}:`,
-        error
+        error,
       );
       return null;
     }
@@ -1233,7 +1217,7 @@ export class PM2Service implements OnModuleInit {
     } catch (error) {
       this.logger.error(
         `Error getting logs for service ${service.name}:`,
-        error
+        error,
       );
       throw new Error(`Failed to get service logs: ${error.message}`);
     }
@@ -1275,11 +1259,11 @@ export class PM2Service implements OnModuleInit {
     if (!service.repoPath) {
       service.repoPath = await this.generateRepositoryPath(
         service.repositoryUrl,
-        service.name
+        service.name,
       );
       await service.save();
       this.logger.log(
-        `Generated and stored repository path for service ${service.name}: ${service.repoPath}`
+        `Generated and stored repository path for service ${service.name}: ${service.repoPath}`,
       );
     }
   }
@@ -1291,14 +1275,14 @@ export class PM2Service implements OnModuleInit {
       await disconnect();
 
       const appProcesses = processes.filter(
-        (p) => p.name === service.pm2AppName
+        (p) => p.name === service.pm2AppName,
       );
       const currentProcessLength = appProcesses.length;
       const expectedProcessLength =
         service.cluster && service.cluster > 0 ? service.cluster : 1;
       if (currentProcessLength === 0) {
         this.logger.log(
-          `PM2 app ${service.pm2AppName} not found for service ${service.name}, no recreation needed`
+          `PM2 app ${service.pm2AppName} not found for service ${service.name}, no recreation needed`,
         );
         return false; // App doesn't exist, no need to recreate
       }
@@ -1312,7 +1296,7 @@ export class PM2Service implements OnModuleInit {
       const currentExecMode = currentProcess.pm2_env?.exec_mode;
 
       this.logger.log(
-        `Service ${service.name}: Current exec_mode: ${currentExecMode}, Expected exec_mode: ${expectedExecMode}`
+        `Service ${service.name}: Current exec_mode: ${currentExecMode}, Expected exec_mode: ${expectedExecMode}`,
       );
 
       if (
@@ -1320,19 +1304,19 @@ export class PM2Service implements OnModuleInit {
         currentProcessLength === expectedProcessLength
       ) {
         this.logger.log(
-          `Service ${service.name} configuration matches current PM2 setup, no recreation needed`
+          `Service ${service.name} configuration matches current PM2 setup, no recreation needed`,
         );
         return false;
       }
 
       this.logger.log(
-        `Service ${service.name} needs recreation due to configuration change. Current: ${currentExecMode} (${currentProcessLength} instances), Expected: ${expectedExecMode} (${expectedProcessLength} instances)`
+        `Service ${service.name} needs recreation due to configuration change. Current: ${currentExecMode} (${currentProcessLength} instances), Expected: ${expectedExecMode} (${expectedProcessLength} instances)`,
       );
       return true;
     } catch (error) {
       this.logger.error(
         `Error checking PM2 process recreation need for service ${service.name}:`,
-        error
+        error,
       );
       return true; // If we can't check, better to recreate to be safe
     }
@@ -1347,7 +1331,7 @@ export class PM2Service implements OnModuleInit {
     } catch (error) {
       this.logger.error(
         `Error deleting PM2 process with app name ${pm2AppName}:`,
-        error
+        error,
       );
       throw error;
     }
