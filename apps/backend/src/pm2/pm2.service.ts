@@ -11,6 +11,7 @@ import { Model, Types } from "mongoose";
 import { CurrentUserPayload } from "../auth/decorators/current-user.decorator";
 import * as pm2 from "pm2";
 import { promisify } from "util";
+import { spawn } from "child_process";
 import { ConfigService } from "../config/config.service";
 import { GitHubService } from "../github/github.service";
 import {
@@ -639,10 +640,6 @@ export class PM2Service implements OnModuleInit {
       ? path.join(repoPath, service.sourceDirectory)
       : repoPath;
 
-    const { exec } = require("child_process");
-    const util = require("util");
-    const execPromise = util.promisify(exec);
-
     // Determine which package manager to use (default to yarn for backwards compatibility)
     const packageManager = service.packageManager || "yarn";
     this.logger.log(
@@ -657,8 +654,13 @@ export class PM2Service implements OnModuleInit {
       );
     }
 
-    // Run install command (works for yarn, npm, and pnpm)
-    await execPromise(`${packageManagerPath} install`, { cwd });
+    await this.runCommand(
+      packageManagerPath,
+      ["install"],
+      cwd,
+      `${service.name}/install`,
+      15 * 60_000
+    );
 
     // For static sites, always run build since the output is required
     if (service.serviceType === "static") {
@@ -666,7 +668,13 @@ export class PM2Service implements OnModuleInit {
         this.logger.log(
           `Building static site ${service.name} using ${packageManager}...`
         );
-        await execPromise(`${packageManagerPath} run build`, { cwd });
+        await this.runCommand(
+          packageManagerPath,
+          ["run", "build"],
+          cwd,
+          `${service.name}/build`,
+          20 * 60_000
+        );
 
         // Install serve globally using the appropriate node version
         let npxPath = "npx";
@@ -676,11 +684,15 @@ export class PM2Service implements OnModuleInit {
         this.logger.log(
           `Ensuring serve is available for ${service.name}...`
         );
-        await execPromise(`${npxPath} --yes serve --version`, { cwd });
-      } catch (error) {
-        throw new Error(
-          `Failed to build static site: ${error.message}`
+        await this.runCommand(
+          npxPath,
+          ["--yes", "serve", "--version"],
+          cwd,
+          `${service.name}/serve-check`,
+          2 * 60_000
         );
+      } catch (error) {
+        throw new Error(`Failed to build static site: ${error.message}`);
       }
     } else if (service.useNpm) {
       // Run build if available (for Node.js services)
@@ -696,12 +708,140 @@ export class PM2Service implements OnModuleInit {
             `Building ${service.name} using ${packageManager}...`
           );
           // "run build" works for yarn, npm, and pnpm
-          await execPromise(`${packageManagerPath} run build`, { cwd });
+          await this.runCommand(
+            packageManagerPath,
+            ["run", "build"],
+            cwd,
+            `${service.name}/build`,
+            20 * 60_000
+          );
         }
       } catch (error) {
         throw new Error(`Failed to install/build service: ${error.message}`);
       }
     }
+  }
+
+  /**
+   * Spawn a child process and stream its stdout/stderr line-by-line into the
+   * dashboard logger. Avoids the 1MB stdout buffer limit of child_process.exec
+   * and gives operators real-time visibility into long-running installs/builds.
+   *
+   * Resolves on exit code 0. Rejects on non-zero exit or timeout. The rejection
+   * message includes the last 50 lines of merged output so failures are
+   * actionable without needing SSH access.
+   */
+  private runCommand(
+    cmd: string,
+    args: string[],
+    cwd: string,
+    label: string,
+    timeoutMs = 10 * 60_000
+  ): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const child = spawn(cmd, args, {
+        cwd,
+        env: process.env,
+        // Note: shell:false (default) so cmd/args are not interpreted by sh.
+      });
+
+      const tail: string[] = [];
+      const TAIL_LIMIT = 50;
+      let stdoutBuf = "";
+      let stderrBuf = "";
+      let settled = false;
+
+      const pushTail = (line: string) => {
+        tail.push(line);
+        if (tail.length > TAIL_LIMIT) tail.shift();
+      };
+
+      const flushLines = (
+        chunk: string,
+        bufRef: { value: string },
+        emit: (line: string) => void
+      ) => {
+        bufRef.value += chunk;
+        let idx: number;
+        while ((idx = bufRef.value.indexOf("\n")) !== -1) {
+          const line = bufRef.value.slice(0, idx).replace(/\r$/, "");
+          bufRef.value = bufRef.value.slice(idx + 1);
+          if (line.length > 0) {
+            pushTail(line);
+            emit(line);
+          }
+        }
+      };
+
+      const stdoutRef = { value: stdoutBuf };
+      const stderrRef = { value: stderrBuf };
+
+      child.stdout?.on("data", (data: Buffer) =>
+        flushLines(data.toString("utf8"), stdoutRef, (line) =>
+          this.logger.log(`[${label}] ${line}`)
+        )
+      );
+      child.stderr?.on("data", (data: Buffer) =>
+        flushLines(data.toString("utf8"), stderrRef, (line) =>
+          this.logger.warn(`[${label}] ${line}`)
+        )
+      );
+
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        this.logger.error(
+          `[${label}] Command timed out after ${Math.round(timeoutMs / 1000)}s, killing process`
+        );
+        try {
+          child.kill("SIGKILL");
+        } catch {
+          /* noop */
+        }
+        reject(
+          new Error(
+            `${label} timed out after ${Math.round(timeoutMs / 1000)}s. Last output:\n${tail.join("\n")}`
+          )
+        );
+      }, timeoutMs);
+
+      child.on("error", (err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reject(
+          new Error(
+            `${label} failed to spawn (${cmd}): ${err.message}`
+          )
+        );
+      });
+
+      child.on("close", (code, signal) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+
+        // Flush any remaining buffered text that wasn't newline-terminated.
+        if (stdoutRef.value.trim()) {
+          pushTail(stdoutRef.value.trim());
+          this.logger.log(`[${label}] ${stdoutRef.value.trim()}`);
+        }
+        if (stderrRef.value.trim()) {
+          pushTail(stderrRef.value.trim());
+          this.logger.warn(`[${label}] ${stderrRef.value.trim()}`);
+        }
+
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(
+            new Error(
+              `${label} exited with code ${code}${signal ? ` (signal ${signal})` : ""}. Last output:\n${tail.join("\n")}`
+            )
+          );
+        }
+      });
+    });
   }
 
   private async startPM2Process(
