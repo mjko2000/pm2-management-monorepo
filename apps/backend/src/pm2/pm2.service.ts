@@ -659,7 +659,12 @@ export class PM2Service implements OnModuleInit {
       ["install"],
       cwd,
       `${service.name}/install`,
-      15 * 60_000
+      15 * 60_000,
+      // Force development NODE_ENV so devDependencies (next, typescript,
+      // tailwind, sentry-cli, etc.) are installed. The backend itself runs
+      // with NODE_ENV=production for Swagger gating; we only override for the
+      // child install command.
+      { NODE_ENV: "development" }
     );
 
     // For static sites, always run build since the output is required
@@ -736,12 +741,17 @@ export class PM2Service implements OnModuleInit {
     args: string[],
     cwd: string,
     label: string,
-    timeoutMs = 10 * 60_000
+    timeoutMs = 10 * 60_000,
+    extraEnv?: Record<string, string>
   ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const child = spawn(cmd, args, {
         cwd,
-        env: process.env,
+        // extraEnv last so callers can override anything (e.g. NODE_ENV).
+        env: { ...process.env, ...(extraEnv ?? {}) },
+        // Close stdin so postinstall scripts (husky, sentry-cli, prompts-based
+        // tools) can never hang waiting for input we won't send.
+        stdio: ["ignore", "pipe", "pipe"],
         // Note: shell:false (default) so cmd/args are not interpreted by sh.
       });
 
