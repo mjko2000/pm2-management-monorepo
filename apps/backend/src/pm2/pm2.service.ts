@@ -639,7 +639,9 @@ export class PM2Service implements OnModuleInit {
     const cwd = service.sourceDirectory
       ? path.join(repoPath, service.sourceDirectory)
       : repoPath;
-
+    const env = service.environments.find(
+      (e) => e.name === service.activeEnvironment,
+    )?.variables;
     // Determine which package manager to use (default to yarn for backwards compatibility)
     const packageManager = service.packageManager || "yarn";
     this.logger.log(
@@ -660,6 +662,10 @@ export class PM2Service implements OnModuleInit {
       cwd,
       `${service.name}/install`,
       15 * 60_000,
+      {
+        ...env,
+        NODE_ENV: "development",
+      },
     );
 
     // For static sites, always run build since the output is required
@@ -674,6 +680,7 @@ export class PM2Service implements OnModuleInit {
           cwd,
           `${service.name}/build`,
           20 * 60_000,
+          env,
         );
 
         // Install serve globally using the appropriate node version
@@ -688,6 +695,7 @@ export class PM2Service implements OnModuleInit {
           cwd,
           `${service.name}/serve-check`,
           2 * 60_000,
+          env,
         );
       } catch (error) {
         throw new Error(`Failed to build static site: ${error.message}`);
@@ -712,6 +720,7 @@ export class PM2Service implements OnModuleInit {
             cwd,
             `${service.name}/build`,
             20 * 60_000,
+            env,
           );
         }
       } catch (error) {
@@ -736,11 +745,13 @@ export class PM2Service implements OnModuleInit {
     cwd: string,
     label: string,
     timeoutMs = 10 * 60_000,
+    env?: Record<string, string>,
   ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const child = spawn(cmd, args, {
         cwd,
         stdio: ["ignore", "pipe", "pipe"],
+        env,
       });
 
       const tail: string[] = [];
