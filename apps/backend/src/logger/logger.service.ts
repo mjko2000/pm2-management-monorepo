@@ -27,32 +27,49 @@ export class CustomLogger implements LoggerService {
     }
   }
 
+  /**
+   * Normalize a `trace`-like argument so callers can pass an Error object,
+   * a string, or anything else without losing the stack trace and without
+   * having `[object Object]` written to the log store.
+   */
+  private normalizeTrace(trace?: unknown): string | undefined {
+    if (trace === undefined || trace === null) return undefined;
+    if (typeof trace === "string") return trace;
+    if (trace instanceof Error) return trace.stack ?? trace.message;
+    try {
+      return JSON.stringify(trace);
+    } catch {
+      return String(trace);
+    }
+  }
+
   log(message: string, context?: string) {
-    this.setContext(context);
+    if (context) this.setContext(context);
     console.log(`[${this.context}] ${message}`);
     this.storeLog("info", message);
   }
 
-  error(message: string, trace?: string, context?: string) {
-    this.setContext(context);
-    console.error(`[${this.context}] ${message}`, trace);
-    this.storeLog("error", message, trace);
+  error(message: string, trace?: unknown, context?: string) {
+    if (context) this.setContext(context);
+    const traceStr = this.normalizeTrace(trace);
+    console.error(`[${this.context}] ${message}`, traceStr ?? "");
+    this.storeLog("error", message, traceStr);
   }
 
   warn(message: string, context?: string) {
-    this.setContext(context);
+    if (context) this.setContext(context);
     console.warn(`[${this.context}] ${message}`);
     this.storeLog("warn", message);
   }
 
   debug(message: string, context?: string) {
-    this.setContext(context);
+    if (context) this.setContext(context);
     console.debug(`[${this.context}] ${message}`);
     this.storeLog("debug", message);
   }
 
   verbose(message: string, context?: string) {
-    this.setContext(context);
+    if (context) this.setContext(context);
     console.log(`[${this.context}] ${message}`);
     this.storeLog("verbose", message);
   }
