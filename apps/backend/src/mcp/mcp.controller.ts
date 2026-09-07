@@ -12,8 +12,10 @@ import { Request, Response } from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { Public } from "../auth/decorators/public.decorator";
+import { getRequestMcpAuth } from "./mcp.auth";
 import { McpAuthGuard } from "./mcp.auth.guard";
 import { McpServerFactory } from "./mcp.server";
+import { McpPermission } from "./mcp.permissions";
 
 @Public()
 @UseGuards(McpAuthGuard)
@@ -50,7 +52,7 @@ export class McpController {
 
   @Get("sse")
   async handleSse(@Req() req: Request, @Res() res: Response): Promise<void> {
-    const server = this.serverFactory.create();
+    const server = this.serverFactory.create(this.permissionsFrom(req));
     const transport = new SSEServerTransport("/messages", res);
 
     this.sseSessions.set(transport.sessionId, {
@@ -97,7 +99,7 @@ export class McpController {
     req: Request,
     res: Response,
   ): Promise<void> {
-    const server = this.serverFactory.create();
+    const server = this.serverFactory.create(this.permissionsFrom(req));
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
@@ -122,5 +124,9 @@ export class McpController {
       void transport.close();
       void server.close();
     }
+  }
+
+  private permissionsFrom(req: Request): McpPermission[] {
+    return getRequestMcpAuth(req)?.permissions ?? [];
   }
 }
