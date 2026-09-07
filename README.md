@@ -90,6 +90,7 @@ A modern, feature-rich web-based dashboard for managing PM2 processes with GitHu
 
 ### 📝 Logging & Debugging
 
+- **MCP for AI clients**: Remote Streamable HTTP (`/mcp`) with `MCP_SECRET` — list, start/stop/reload/restart, logs, and metrics
 - **Service Logs**: View real-time logs for individual services
 - **System Logs**: Monitor system-level events and errors
 - **Log Streaming**: Live log updates in the web interface
@@ -246,6 +247,10 @@ NODE_ENV=development
 JWT_SECRET=your_super_secret_jwt_key_change_this_in_production
 JWT_EXPIRES_IN=7d
 
+# MCP remote access for AI clients (min 32 chars). Leave empty to disable /mcp.
+# Generate with: openssl rand -hex 64
+MCP_SECRET=
+
 # Working Directory (where repositories will be cloned)
 WORKING_DIR=/opt/pm2-dashboard/repositories
 
@@ -265,6 +270,44 @@ SERVER_IP=your.server.ip.address
 # Webhook CI/CD (public URL for GitHub to call)
 BACKEND_URL=https://api.example.com
 ```
+
+### MCP Server (AI access)
+
+The backend exposes a remote MCP endpoint so Cursor, Claude, or other MCP clients can list and operate PM2 services. Auth is a shared secret (`MCP_SECRET`), not the dashboard JWT.
+
+| Item | Value |
+| ---- | ----- |
+| Streamable HTTP | `POST/GET/DELETE /mcp` |
+| Legacy SSE | `GET /sse` + `POST /messages` |
+| Auth | `Authorization: Bearer <MCP_SECRET>` or `x-mcp-secret` |
+
+If `MCP_SECRET` is missing or shorter than 32 characters, `/mcp` returns 404.
+
+**Cursor / Claude `mcp.json`:**
+
+```json
+{
+  "mcpServers": {
+    "pm2-dashboard": {
+      "url": "http://YOUR_SERVER_IP:3001/mcp",
+      "headers": { "Authorization": "Bearer YOUR_MCP_SECRET" }
+    }
+  }
+}
+```
+
+Prefer HTTPS and restrict the backend port at the firewall. `start_service` and `reload_service` can take 15–20 minutes — raise client/proxy timeouts.
+
+| Tool | Description |
+| ---- | ----------- |
+| `list_services` | List services (no env values) |
+| `get_service` | Service details by id or name |
+| `start_service` / `stop_service` / `restart_service` / `reload_service` | Lifecycle |
+| `get_service_logs` | PM2 logs for one service |
+| `get_dashboard_logs` | Dashboard application logs |
+| `get_service_metrics` / `get_system_metrics` | Process and host metrics |
+
+Environment variable values, GitHub tokens, and deploy keys are never returned.
 
 ### Frontend Environment Variables
 
@@ -555,6 +598,7 @@ pm2-dashboard/
 │   │   │   ├── email/        # Email service (nodemailer)
 │   │   │   ├── github/       # GitHub integration
 │   │   │   ├── pm2/          # PM2 service management
+│   │   │   ├── mcp/          # Remote MCP (AI) — /mcp + /sse
 │   │   │   ├── webhook/      # GitHub webhook CI/CD
 │   │   │   ├── environment/  # Environment management
 │   │   │   ├── logger/       # Logging service
@@ -709,7 +753,15 @@ pm2-dashboard/
 | `POST`   | `/services/:id/webhook/enable`  | Enable webhook (creates on GitHub)    | Required |
 | `DELETE` | `/services/:id/webhook/disable` | Disable webhook (removes from GitHub) | Required |
 
-**Note**: All endpoints except `/auth/login` and `/webhook/:deployKey` require JWT authentication via Bearer token.
+### MCP
+
+| Method | Endpoint | Description | Auth |
+| ------ | -------- | ----------- | ---- |
+| `POST` / `GET` / `DELETE` | `/mcp` | Streamable HTTP MCP | `MCP_SECRET` |
+| `GET` | `/sse` | Legacy SSE MCP | `MCP_SECRET` |
+| `POST` | `/messages` | Legacy SSE messages | `MCP_SECRET` |
+
+**Note**: All endpoints except `/auth/login`, `/webhook/:deployKey`, and `/mcp` (when `MCP_SECRET` is set) require JWT authentication via Bearer token. MCP uses `MCP_SECRET`, not a user JWT.
 
 ---
 
@@ -795,6 +847,7 @@ npm run init:db          # Initialize database (create default admin)
 - [ ] Complete first-login setup (change default admin password and email)
 - [ ] Enable 2FA on admin account (Email OTP and/or TOTP)
 - [ ] Set strong `JWT_SECRET`
+- [ ] Set a long `MCP_SECRET` if exposing `/mcp` to AI clients; keep the port firewalled or behind HTTPS
 - [ ] Configure HTTPS/SSL
 - [ ] Set up proper MongoDB authentication
 - [ ] Configure firewall rules

@@ -24,6 +24,7 @@ import { JwtAuthGuard } from "./auth/guards/jwt-auth.guard";
 import { EmailModule } from "./email/email.module";
 import { DomainModule } from "./domain/domain.module";
 import { WebhookModule } from "./webhook/webhook.module";
+import { McpModule } from "./mcp/mcp.module";
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { WebhookModule } from "./webhook/webhook.module";
     EmailModule,
     DomainModule,
     WebhookModule,
+    McpModule,
   ],
   controllers: [AppController],
   providers: [
