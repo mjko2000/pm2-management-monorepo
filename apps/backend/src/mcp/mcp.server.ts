@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { McpToolsService } from "./mcp.tools";
+import { McpPermission } from "./mcp.permissions";
 
 const serviceRef = z
   .string()
@@ -30,11 +31,6 @@ function asError(error: unknown) {
 
 type ToolResult = ReturnType<typeof asText> | ReturnType<typeof asError>;
 
-/**
- * The SDK's dual Zod 3/4 generics can fail TS2589 ("excessively deep").
- * Register through this helper so schemas stay runtime-validated without
- * exploding the type checker.
- */
 function addTool(
   server: McpServer,
   name: string,
@@ -68,7 +64,8 @@ function addTool(
 export class McpServerFactory {
   constructor(private readonly tools: McpToolsService) {}
 
-  create(): McpServer {
+  create(permissions: readonly McpPermission[]): McpServer {
+    const allowed = new Set(permissions);
     const server = new McpServer({
       name: "pm2-dashboard",
       version: "1.0.0",
@@ -78,98 +75,87 @@ export class McpServerFactory {
         "Environment variable values, GitHub tokens, and deploy keys are never returned.",
     });
 
-    this.registerTools(server);
+    this.registerTools(server, allowed);
     return server;
   }
 
-  private registerTools(server: McpServer): void {
+  private registerTools(
+    server: McpServer,
+    allowed: Set<McpPermission>,
+  ): void {
     const tools = this.tools;
 
-    addTool(
-      server,
-      "list_services",
-      "List all PM2 Dashboard services (id, name, status, branch, repo, env names). Does not include secrets.",
-      async () => {
+    const register = (
+      name: McpPermission,
+      description: string,
+      schema: Record<string, z.ZodTypeAny> | undefined,
+      run: (args: Record<string, any>) => Promise<unknown>,
+    ) => {
+      if (!allowed.has(name)) {
+        return;
+      }
+
+      const handler = async (args: Record<string, any> = {}) => {
+        if (!allowed.has(name)) {
+          return asError(new Error(`Permission denied: ${name}`));
+        }
         try {
-          return asText(await tools.listServices());
+          return asText(await run(args));
         } catch (error) {
           return asError(error);
         }
-      },
+      };
+
+      if (schema) {
+        addTool(server, name, description, schema, handler);
+      } else {
+        addTool(server, name, description, () => handler({}));
+      }
+    };
+
+    register(
+      "list_services",
+      "List all PM2 Dashboard services (id, name, status, branch, repo, env names). Does not include secrets.",
+      undefined,
+      () => tools.listServices(),
     );
 
-    addTool(
-      server,
+    register(
       "get_service",
       "Get details for one service by id or name. Environment variable values are omitted.",
       { service: serviceRef },
-      async ({ service }) => {
-        try {
-          return asText(await tools.getService(service));
-        } catch (error) {
-          return asError(error);
-        }
-      },
+      ({ service }) => tools.getService(service),
     );
 
-    addTool(
-      server,
+    register(
       "start_service",
       "Deploy and start a service (clone/pull, install, build, then PM2 start). Can take 15-20 minutes.",
       { service: serviceRef },
-      async ({ service }) => {
-        try {
-          return asText(await tools.startService(service));
-        } catch (error) {
-          return asError(error);
-        }
-      },
+      ({ service }) => tools.startService(service),
     );
 
-    addTool(
-      server,
+    register(
       "stop_service",
       "Stop a running PM2 service.",
       { service: serviceRef },
-      async ({ service }) => {
-        try {
-          return asText(await tools.stopService(service));
-        } catch (error) {
-          return asError(error);
-        }
-      },
+      ({ service }) => tools.stopService(service),
     );
 
-    addTool(
-      server,
+    register(
       "restart_service",
       "Restart a running PM2 service without pulling new code.",
       { service: serviceRef },
-      async ({ service }) => {
-        try {
-          return asText(await tools.restartService(service));
-        } catch (error) {
-          return asError(error);
-        }
-      },
+      ({ service }) => tools.restartService(service),
     );
 
-    addTool(
-      server,
+    register(
       "reload_service",
       "Pull latest code, install/build, and reload the service (zero-downtime when possible). Can take 15-20 minutes.",
       { service: serviceRef },
-      async ({ service }) => {
-        try {
-          return asText(await tools.reloadService(service));
-        } catch (error) {
-          return asError(error);
-        }
-      },
+      ({ service }) => tools.reloadService(service),
     );
 
-    addTool(
-      server,
+    register(
       "get_service_logs",
       "Read recent PM2 stdout/stderr for a service. lines is clamped to 1-5000 (default 100).",
       {
@@ -182,17 +168,10 @@ export class McpServerFactory {
           .optional()
           .describe("Number of log lines to return (1-5000, default 100)"),
       },
-      async ({ service, lines }) => {
-        try {
-          return asText(await tools.getServiceLogs(service, lines));
-        } catch (error) {
-          return asError(error);
-        }
-      },
+      ({ service, lines }) => tools.getServiceLogs(service, lines),
     );
 
-    addTool(
-      server,
+    register(
       "get_dashboard_logs",
       "Read PM2 Dashboard application logs stored in MongoDB (install/build output, errors).",
       {
@@ -201,42 +180,22 @@ export class McpServerFactory {
         level: z.enum(["info", "warn", "error", "debug", "verbose"]).optional(),
         context: z.string().max(128).optional(),
       },
-      async ({ limit, skip, level, context }) => {
-        try {
-          return asText(
-            await tools.getDashboardLogs({ limit, skip, level, context }),
-          );
-        } catch (error) {
-          return asError(error);
-        }
-      },
+      ({ limit, skip, level, context }) =>
+        tools.getDashboardLogs({ limit, skip, level, context }),
     );
 
-    addTool(
-      server,
+    register(
       "get_service_metrics",
       "CPU, memory, uptime, restarts, and per-process details for a running service.",
       { service: serviceRef },
-      async ({ service }) => {
-        try {
-          return asText(await tools.getServiceMetrics(service));
-        } catch (error) {
-          return asError(error);
-        }
-      },
+      ({ service }) => tools.getServiceMetrics(service),
     );
 
-    addTool(
-      server,
+    register(
       "get_system_metrics",
       "Host CPU and memory metrics for the VPS.",
-      async () => {
-        try {
-          return asText(await tools.getSystemMetrics());
-        } catch (error) {
-          return asError(error);
-        }
-      },
+      undefined,
+      () => tools.getSystemMetrics(),
     );
   }
 }

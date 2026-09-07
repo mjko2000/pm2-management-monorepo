@@ -2,27 +2,30 @@ import {
   CanActivate,
   ExecutionContext,
   Injectable,
-  NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { Request } from "express";
-import { extractMcpSecret, getMcpSecret, secretsEqual } from "./mcp.auth";
+import { extractMcpSecret, setRequestMcpAuth } from "./mcp.auth";
+import { McpTokenService } from "./mcp.token.service";
 
 @Injectable()
 export class McpAuthGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
-    const expected = getMcpSecret();
-    // Unconfigured MCP looks like an unknown route so the endpoint is not advertised.
-    if (!expected) {
-      throw new NotFoundException();
-    }
+  constructor(private readonly mcpTokenService: McpTokenService) {}
 
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
     const provided = extractMcpSecret(request);
-    if (!provided || !secretsEqual(provided, expected)) {
-      throw new UnauthorizedException("Invalid MCP secret");
+    if (!provided) {
+      throw new UnauthorizedException("Invalid MCP token");
     }
 
+    const auth = await this.mcpTokenService.findActiveByPlaintext(provided);
+    if (!auth) {
+      throw new UnauthorizedException("Invalid MCP token");
+    }
+
+    setRequestMcpAuth(request, auth);
+    void this.mcpTokenService.touchLastUsed(auth.id);
     return true;
   }
 }

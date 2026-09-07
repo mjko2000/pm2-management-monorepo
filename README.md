@@ -90,7 +90,7 @@ A modern, feature-rich web-based dashboard for managing PM2 processes with GitHu
 
 ### 📝 Logging & Debugging
 
-- **MCP for AI clients**: Remote Streamable HTTP (`/mcp`) with `MCP_SECRET` — list, start/stop/reload/restart, logs, and metrics
+- **MCP for AI clients**: Admin-created bot tokens with per-action permissions — list, start/stop/reload/restart, logs, and metrics
 - **Service Logs**: View real-time logs for individual services
 - **System Logs**: Monitor system-level events and errors
 - **Log Streaming**: Live log updates in the web interface
@@ -247,10 +247,6 @@ NODE_ENV=development
 JWT_SECRET=your_super_secret_jwt_key_change_this_in_production
 JWT_EXPIRES_IN=7d
 
-# MCP remote access for AI clients (min 32 chars). Leave empty to disable /mcp.
-# Generate with: openssl rand -hex 64
-MCP_SECRET=
-
 # Working Directory (where repositories will be cloned)
 WORKING_DIR=/opt/pm2-dashboard/repositories
 
@@ -273,24 +269,24 @@ BACKEND_URL=https://api.example.com
 
 ### MCP Server (AI access)
 
-The backend exposes a remote MCP endpoint so Cursor, Claude, or other MCP clients can list and operate PM2 services. Auth is a shared secret (`MCP_SECRET`), not the dashboard JWT.
+Admins create bot tokens on **MCP** in the dashboard (`/mcp`). Each token has action permissions that apply to **all services**. The plaintext token is shown once at create/regenerate.
 
 | Item | Value |
 | ---- | ----- |
 | Streamable HTTP | `POST/GET/DELETE /mcp` |
 | Legacy SSE | `GET /sse` + `POST /messages` |
-| Auth | `Authorization: Bearer <MCP_SECRET>` or `x-mcp-secret` |
+| Auth | `Authorization: Bearer mcp_...` or `x-mcp-secret` |
 
-If `MCP_SECRET` is missing or shorter than 32 characters, `/mcp` returns 404.
+Invalid or revoked tokens return 401. The AI client only sees tools that token is allowed to call.
 
-**Cursor / Claude `mcp.json`:**
+**Cursor / Claude `mcp.json`** (copy from the dashboard after creating a token):
 
 ```json
 {
   "mcpServers": {
     "pm2-dashboard": {
       "url": "http://YOUR_SERVER_IP:3001/mcp",
-      "headers": { "Authorization": "Bearer YOUR_MCP_SECRET" }
+      "headers": { "Authorization": "Bearer mcp_..." }
     }
   }
 }
@@ -598,7 +594,7 @@ pm2-dashboard/
 │   │   │   ├── email/        # Email service (nodemailer)
 │   │   │   ├── github/       # GitHub integration
 │   │   │   ├── pm2/          # PM2 service management
-│   │   │   ├── mcp/          # Remote MCP (AI) — /mcp + /sse
+│   │   │   ├── mcp/          # Remote MCP + admin bot tokens
 │   │   │   ├── webhook/      # GitHub webhook CI/CD
 │   │   │   ├── environment/  # Environment management
 │   │   │   ├── logger/       # Logging service
@@ -757,11 +753,16 @@ pm2-dashboard/
 
 | Method | Endpoint | Description | Auth |
 | ------ | -------- | ----------- | ---- |
-| `POST` / `GET` / `DELETE` | `/mcp` | Streamable HTTP MCP | `MCP_SECRET` |
-| `GET` | `/sse` | Legacy SSE MCP | `MCP_SECRET` |
-| `POST` | `/messages` | Legacy SSE messages | `MCP_SECRET` |
+| `GET` | `/mcp/tokens` | List bot tokens | Admin JWT |
+| `POST` | `/mcp/tokens` | Create token (plaintext once) | Admin JWT |
+| `PUT` | `/mcp/tokens/:id` | Update name, permissions, active | Admin JWT |
+| `DELETE` | `/mcp/tokens/:id` | Revoke token | Admin JWT |
+| `POST` | `/mcp/tokens/:id/regenerate` | New secret (plaintext once) | Admin JWT |
+| `POST` / `GET` / `DELETE` | `/mcp` | Streamable HTTP MCP | Bot token |
+| `GET` | `/sse` | Legacy SSE MCP | Bot token |
+| `POST` | `/messages` | Legacy SSE messages | Bot token |
 
-**Note**: All endpoints except `/auth/login`, `/webhook/:deployKey`, and `/mcp` (when `MCP_SECRET` is set) require JWT authentication via Bearer token. MCP uses `MCP_SECRET`, not a user JWT.
+**Note**: All endpoints except `/auth/login`, `/webhook/:deployKey`, and `/mcp` (bot token) require JWT authentication via Bearer token. MCP protocol uses a dashboard-issued bot token, not a user JWT.
 
 ---
 
@@ -847,7 +848,7 @@ npm run init:db          # Initialize database (create default admin)
 - [ ] Complete first-login setup (change default admin password and email)
 - [ ] Enable 2FA on admin account (Email OTP and/or TOTP)
 - [ ] Set strong `JWT_SECRET`
-- [ ] Set a long `MCP_SECRET` if exposing `/mcp` to AI clients; keep the port firewalled or behind HTTPS
+- [ ] Create MCP bot tokens from **MCP** (admin) and keep `/mcp` firewalled or behind HTTPS
 - [ ] Configure HTTPS/SSL
 - [ ] Set up proper MongoDB authentication
 - [ ] Configure firewall rules

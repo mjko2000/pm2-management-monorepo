@@ -11,6 +11,7 @@ import { Logs } from "./pages/Logs";
 import Team from "./pages/Team";
 import Profile from "./pages/Profile";
 import GithubTokens from "./pages/GithubTokens";
+import McpTokens from "./pages/McpTokens";
 import Login from "./pages/Login";
 import { AuthProvider } from "./contexts/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -38,6 +39,7 @@ function App() {
             <Route path="/services/:id" element={<ServiceDetails />} />
             <Route path="/logs" element={<Logs />} />
                       <Route path="/github-tokens" element={<GithubTokens />} />
+                      <Route path="/mcp" element={<McpTokens />} />
                       <Route path="/team" element={<Team />} />
                       <Route path="/profile" element={<Profile />} />
                     </Routes>

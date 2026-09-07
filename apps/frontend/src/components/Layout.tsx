@@ -26,6 +26,7 @@ import {
   Person as PersonIcon,
   Group as GroupIcon,
   Key as KeyIcon,
+  SmartToy as SmartToyIcon,
 } from "@mui/icons-material";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -66,7 +67,10 @@ export default function Layout({ children }: LayoutProps) {
     { text: "Logs", icon: <AssessmentIcon />, path: "/logs" },
     { text: "GitHub Tokens", icon: <KeyIcon />, path: "/github-tokens" },
     ...(user?.role === "admin"
-      ? [{ text: "Team", icon: <GroupIcon />, path: "/team" }]
+      ? [
+          { text: "MCP", icon: <SmartToyIcon />, path: "/mcp" },
+          { text: "Team", icon: <GroupIcon />, path: "/team" },
+        ]
       : []),
   ];
 
