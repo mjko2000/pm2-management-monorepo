@@ -305,7 +305,6 @@ log "=== Writing environment files ==="
 BACKEND_ENV="$REPO_ROOT/apps/backend/.env"
 FRONTEND_ENV="$REPO_ROOT/apps/frontend/.env"
 JWT_SECRET="$(openssl rand -hex 64)"
-MCP_SECRET="$(openssl rand -hex 64)"
 APP_URL="http://${SERVER_IP}:${FRONTEND_PORT}"
 API_URL="http://${SERVER_IP}:${BACKEND_PORT}"
 
@@ -327,7 +326,6 @@ WORKING_DIR=${WORKING_DIR}
 
 JWT_SECRET=${JWT_SECRET}
 JWT_EXPIRES_IN=12h
-MCP_SECRET=${MCP_SECRET}
 
 ALLOWED_ORIGINS=${APP_URL}
 APP_NAME=PM2 Dashboard
@@ -422,16 +420,8 @@ echo "  Frontend:  ${APP_URL}"
 echo "  Backend:   ${API_URL}"
 echo "  MCP:       ${API_URL}/mcp"
 echo ""
-echo "  MCP secret is in apps/backend/.env as MCP_SECRET (do not commit it)."
-echo "  Cursor / Claude mcp.json:"
-echo "    {"
-echo "      \"mcpServers\": {"
-echo "        \"pm2-dashboard\": {"
-echo "          \"url\": \"${API_URL}/mcp\","
-echo "          \"headers\": { \"Authorization\": \"Bearer <MCP_SECRET>\" }"
-echo "        }"
-echo "      }"
-echo "    }"
+echo "  Create AI bot tokens in the dashboard: ${APP_URL}/mcp (admin only)."
+echo "  Each token can be limited to specific actions (list, start, logs, ...)."
 echo ""
 echo "  Default login:"
 echo "    Username: admin"

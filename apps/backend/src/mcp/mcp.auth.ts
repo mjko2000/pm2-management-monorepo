@@ -1,25 +1,11 @@
-import { timingSafeEqual, createHash } from "crypto";
 import { Request } from "express";
-
-export const MCP_SECRET_MIN_LENGTH = 32;
+import { McpAuthContext } from "./mcp.token.service";
 
 export const MCP_ADMIN = {
   userId: "mcp",
   username: "mcp",
   role: "admin",
 } as const;
-
-export function getMcpSecret(): string | undefined {
-  const secret = process.env.MCP_SECRET?.trim();
-  if (!secret || secret.length < MCP_SECRET_MIN_LENGTH) {
-    return undefined;
-  }
-  return secret;
-}
-
-export function isMcpEnabled(): boolean {
-  return Boolean(getMcpSecret());
-}
 
 export function extractMcpSecret(req: Request): string | undefined {
   const authorization = req.headers.authorization;
@@ -41,12 +27,10 @@ export function extractMcpSecret(req: Request): string | undefined {
   return undefined;
 }
 
-/**
- * Compare secrets in constant time by hashing first so lengths cannot leak
- * via early return from timingSafeEqual.
- */
-export function secretsEqual(provided: string, expected: string): boolean {
-  const providedHash = createHash("sha256").update(provided).digest();
-  const expectedHash = createHash("sha256").update(expected).digest();
-  return timingSafeEqual(providedHash, expectedHash);
+export function getRequestMcpAuth(req: Request): McpAuthContext | undefined {
+  return (req as Request & { mcpAuth?: McpAuthContext }).mcpAuth;
+}
+
+export function setRequestMcpAuth(req: Request, auth: McpAuthContext): void {
+  (req as Request & { mcpAuth?: McpAuthContext }).mcpAuth = auth;
 }
