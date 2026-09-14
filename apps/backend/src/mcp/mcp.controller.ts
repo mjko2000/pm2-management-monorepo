@@ -52,7 +52,7 @@ export class McpController {
 
   @Get("sse")
   async handleSse(@Req() req: Request, @Res() res: Response): Promise<void> {
-    const server = this.serverFactory.create(this.permissionsFrom(req));
+    const server = this.serverFactory.create(this.authFrom(req));
     const transport = new SSEServerTransport("/messages", res);
 
     this.sseSessions.set(transport.sessionId, {
@@ -99,7 +99,7 @@ export class McpController {
     req: Request,
     res: Response,
   ): Promise<void> {
-    const server = this.serverFactory.create(this.permissionsFrom(req));
+    const server = this.serverFactory.create(this.authFrom(req));
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
@@ -126,7 +126,14 @@ export class McpController {
     }
   }
 
-  private permissionsFrom(req: Request): McpPermission[] {
-    return getRequestMcpAuth(req)?.permissions ?? [];
+  private authFrom(req: Request): {
+    permissions: McpPermission[];
+    createdBy?: string;
+  } {
+    const auth = getRequestMcpAuth(req);
+    return {
+      permissions: auth?.permissions ?? [],
+      createdBy: auth?.createdBy,
+    };
   }
 }
