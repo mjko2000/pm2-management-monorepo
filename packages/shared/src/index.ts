@@ -36,6 +36,7 @@ export interface Repository {
   fullName: string;
   url: string;
   description?: string;
+  defaultBranch?: string;
 }
 
 // PM2 service configuration

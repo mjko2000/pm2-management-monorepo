@@ -29,6 +29,7 @@ export interface McpAuthContext {
   id: string;
   name: string;
   permissions: McpPermission[];
+  createdBy: string;
 }
 
 @Injectable()
@@ -126,6 +127,7 @@ export class McpTokenService {
       id: token._id.toString(),
       name: token.name,
       permissions: token.permissions,
+      createdBy: token.createdBy.toString(),
     };
   }
 

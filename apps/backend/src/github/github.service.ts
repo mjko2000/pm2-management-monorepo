@@ -51,6 +51,7 @@ export class GitHubService {
         fullName: repo.full_name,
         url: repo.html_url,
         description: repo.description || undefined,
+        defaultBranch: repo.default_branch || undefined,
       }));
     } catch (error) {
       console.error("Error fetching repositories:", error);

@@ -1,6 +1,10 @@
 export const MCP_PERMISSIONS = [
   "list_services",
   "get_service",
+  "list_github_tokens",
+  "list_github_repositories",
+  "list_github_branches",
+  "create_service",
   "start_service",
   "stop_service",
   "restart_service",

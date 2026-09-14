@@ -3,6 +3,10 @@ import { apiDelete, apiGet, apiPost, apiPut } from "./client";
 export const MCP_PERMISSIONS = [
   "list_services",
   "get_service",
+  "list_github_tokens",
+  "list_github_repositories",
+  "list_github_branches",
+  "create_service",
   "start_service",
   "stop_service",
   "restart_service",
@@ -18,6 +22,10 @@ export type McpPermission = (typeof MCP_PERMISSIONS)[number];
 export const MCP_PERMISSION_LABELS: Record<McpPermission, string> = {
   list_services: "List services",
   get_service: "View service details",
+  list_github_tokens: "List GitHub tokens",
+  list_github_repositories: "List GitHub repositories",
+  list_github_branches: "List GitHub branches",
+  create_service: "Create service",
   start_service: "Start",
   stop_service: "Stop",
   restart_service: "Restart",
@@ -32,8 +40,17 @@ export const MCP_PERMISSION_GROUPS: { label: string; permissions: McpPermission[
   [
     { label: "Read", permissions: ["list_services", "get_service"] },
     {
+      label: "GitHub",
+      permissions: [
+        "list_github_tokens",
+        "list_github_repositories",
+        "list_github_branches",
+      ],
+    },
+    {
       label: "Lifecycle",
       permissions: [
+        "create_service",
         "start_service",
         "stop_service",
         "restart_service",
