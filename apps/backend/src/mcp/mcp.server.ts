@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { McpToolsService } from "./mcp.tools";
+import { CreateMcpServiceInput, McpToolsService } from "./mcp.tools";
 import { McpPermission } from "./mcp.permissions";
 
 const serviceRef = z
@@ -64,8 +64,11 @@ function addTool(
 export class McpServerFactory {
   constructor(private readonly tools: McpToolsService) {}
 
-  create(permissions: readonly McpPermission[]): McpServer {
-    const allowed = new Set(permissions);
+  create(auth: {
+    permissions: readonly McpPermission[];
+    createdBy?: string;
+  }): McpServer {
+    const allowed = new Set(auth.permissions);
     const server = new McpServer({
       name: "pm2-dashboard",
       version: "1.0.0",
@@ -75,13 +78,14 @@ export class McpServerFactory {
         "Environment variable values, GitHub tokens, and deploy keys are never returned.",
     });
 
-    this.registerTools(server, allowed);
+    this.registerTools(server, allowed, auth.createdBy);
     return server;
   }
 
   private registerTools(
     server: McpServer,
     allowed: Set<McpPermission>,
+    createdBy?: string,
   ): void {
     const tools = this.tools;
 
@@ -125,6 +129,83 @@ export class McpServerFactory {
       "Get details for one service by id or name. Environment variable values are omitted.",
       { service: serviceRef },
       ({ service }) => tools.getService(service),
+    );
+
+    const githubTokenRef = z
+      .string()
+      .min(1)
+      .max(128)
+      .describe("GitHub token id or name from list_github_tokens");
+
+    register(
+      "list_github_tokens",
+      "List dashboard GitHub tokens the MCP owner can use. Returns id and name only — never the secret. Use id as githubToken in the other tools.",
+      undefined,
+      () => tools.listGithubTokens(createdBy ?? ""),
+    );
+
+    register(
+      "list_github_repositories",
+      "List GitHub repositories for a dashboard token. Returns repositoryUrl and defaultBranch for create_service. Call list_github_branches if you need a non-default branch.",
+      { githubToken: githubTokenRef },
+      ({ githubToken }) =>
+        tools.listGithubRepositories(githubToken, createdBy ?? ""),
+    );
+
+    register(
+      "list_github_branches",
+      "List branches for a repository using a dashboard GitHub token. Use repositoryUrl from list_github_repositories.",
+      {
+        githubToken: githubTokenRef,
+        repositoryUrl: z
+          .string()
+          .min(1)
+          .max(2048)
+          .describe("GitHub repository URL from list_github_repositories"),
+      },
+      ({ githubToken, repositoryUrl }) =>
+        tools.listGithubBranches(repositoryUrl, githubToken, createdBy ?? ""),
+    );
+
+    register(
+      "create_service",
+      "Create a stopped PM2 Dashboard service. Does not start it — call start_service after. Discover githubToken, repositoryUrl, and branch via list_github_tokens → list_github_repositories → list_github_branches.",
+      {
+        name: z
+          .string()
+          .min(1)
+          .max(48)
+          .describe("Service name (letters, numbers, dot, dash, underscore)"),
+        repositoryUrl: z.string().min(1).max(2048).describe("GitHub repository URL"),
+        branch: z.string().min(1).max(255).describe("Git branch to deploy"),
+        githubToken: githubTokenRef,
+        script: z.string().max(1024).optional(),
+        sourceDirectory: z.string().max(255).optional(),
+        useNpm: z.boolean().optional(),
+        npmScript: z.string().max(128).optional(),
+        npmArgs: z.string().max(2048).optional(),
+        args: z.string().max(2048).optional(),
+        nodeVersion: z.string().max(64).optional(),
+        cluster: z.number().int().min(0).max(64).nullable().optional(),
+        visibility: z.enum(["private", "public"]).optional(),
+        serviceType: z.enum(["node", "static"]).optional(),
+        outputDirectory: z.string().max(255).optional(),
+        port: z.number().int().min(1).max(65535).optional(),
+        autostart: z.boolean().optional(),
+        packageManager: z.enum(["yarn", "npm", "pnpm"]).optional(),
+        activeEnvironment: z.string().max(64).optional(),
+        environments: z
+          .array(
+            z.object({
+              name: z.string().min(1).max(64),
+              description: z.string().max(255).optional(),
+              variables: z.record(z.string()).optional(),
+            }),
+          )
+          .optional(),
+      },
+      (args) =>
+        tools.createService(args as CreateMcpServiceInput, createdBy ?? ""),
     );
 
     register(

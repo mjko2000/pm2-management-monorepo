@@ -298,6 +298,10 @@ Prefer HTTPS and restrict the backend port at the firewall. `start_service` and 
 | ---- | ----------- |
 | `list_services` | List services (no env values) |
 | `get_service` | Service details by id or name |
+| `list_github_tokens` | List dashboard GitHub token ids/names (never the secret) |
+| `list_github_repositories` | Repos + default branch for a GitHub token |
+| `list_github_branches` | Branches for a repo + GitHub token |
+| `create_service` | Create a service (does not start it) |
 | `start_service` / `stop_service` / `restart_service` / `reload_service` | Lifecycle |
 | `get_service_logs` | PM2 logs for one service |
 | `get_dashboard_logs` | Dashboard application logs |
