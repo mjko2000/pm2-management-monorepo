@@ -700,8 +700,9 @@ export class PM2Service implements OnModuleInit {
       } catch (error) {
         throw new Error(`Failed to build static site: ${error.message}`);
       }
-    } else if (service.useNpm) {
-      // Run build if available (for Node.js services)
+    } else {
+      // For Node.js services, run build if package.json has a build script
+      // This applies regardless of useNpm setting - needed for cluster mode with direct script execution
       try {
         const fs = require("fs");
         const packageJsonPath = path.join(cwd, "package.json");
@@ -1301,7 +1302,7 @@ export class PM2Service implements OnModuleInit {
         return false; // App doesn't exist, no need to recreate
       }
 
-      // Check the first process to get the exec_mode (all instances should have the same exec_mode)
+      // Check the first process to get the configuration (all instances should have the same config)
       const currentProcess = appProcesses[0];
 
       // Determine what the exec_mode should be based on current service config
@@ -1310,12 +1311,34 @@ export class PM2Service implements OnModuleInit {
       const currentExecMode = currentProcess.pm2_env?.exec_mode;
 
       this.logger.log(
-        `Service ${service.name}: Current exec_mode: ${currentExecMode}, Expected exec_mode: ${expectedExecMode}`,
+        `Service ${service.name}: Current exec_mode: ${currentExecMode}, Expected: ${expectedExecMode}`,
+      );
+      this.logger.log(
+        `Service ${service.name}: Current instance count: ${currentProcessLength}, Expected: ${expectedProcessLength}`,
       );
 
+      // For Node services only, detect if useNpm mode has changed
+      // Static sites always use npx and don't have a useNpm setting
+      let useNpmChanged = false;
+      if (service.serviceType !== "static") {
+        // If current script ends with /npm or is exactly "npm", it was started with useNpm=true
+        const currentScript = currentProcess.pm2_env?.pm_exec_path || "";
+        const currentIsNpm =
+          currentScript === "npm" || currentScript.endsWith("/bin/npm");
+        const expectedIsNpm = service.useNpm === true;
+
+        this.logger.log(
+          `Service ${service.name}: Current script uses npm: ${currentIsNpm}, Expected: ${expectedIsNpm}`,
+        );
+
+        useNpmChanged = currentIsNpm !== expectedIsNpm;
+      }
+
+      // Check exec_mode, instance count, and useNpm mode changes
       if (
         currentExecMode === expectedExecMode &&
-        currentProcessLength === expectedProcessLength
+        currentProcessLength === expectedProcessLength &&
+        !useNpmChanged
       ) {
         this.logger.log(
           `Service ${service.name} configuration matches current PM2 setup, no recreation needed`,
@@ -1324,7 +1347,7 @@ export class PM2Service implements OnModuleInit {
       }
 
       this.logger.log(
-        `Service ${service.name} needs recreation due to configuration change. Current: ${currentExecMode} (${currentProcessLength} instances), Expected: ${expectedExecMode} (${expectedProcessLength} instances)`,
+        `Service ${service.name} needs recreation due to configuration change`,
       );
       return true;
     } catch (error) {
