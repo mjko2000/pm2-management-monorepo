@@ -6,7 +6,6 @@ import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
 import { GitHubModule } from "./github/github.module";
 import { PM2Module } from "./pm2/pm2.module";
 import { EnvironmentModule } from "./environment/environment.module";
-import { ConfigService as AppConfigService } from "./config/config.service";
 import { ConfigModule as AppConfigModule } from "./config/config.module";
 import { Service, ServiceSchema } from "./schemas/service.schema";
 import {
@@ -15,8 +14,6 @@ import {
 } from "./schemas/system-config.schema";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
-import { PM2Service } from "./pm2/pm2.service";
-import { GitHubService } from "./github/github.service";
 import { LoggerModule } from "./logger/logger.module";
 import { Log, LogSchema } from "./schemas/log.schema";
 import { AuthModule } from "./auth/auth.module";
@@ -63,9 +60,6 @@ import { McpModule } from "./mcp/mcp.module";
   controllers: [AppController],
   providers: [
     AppService,
-    PM2Service,
-    GitHubService,
-    AppConfigService,
     // ThrottlerGuard runs before JwtAuthGuard so rate limits apply to anonymous traffic too.
     {
       provide: APP_GUARD,
