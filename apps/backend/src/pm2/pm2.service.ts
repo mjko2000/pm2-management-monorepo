@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   OnModuleInit,
+  OnModuleDestroy,
   ForbiddenException,
   Inject,
   forwardRef,
@@ -26,18 +27,19 @@ import { CustomLogger } from "../logger/logger.service";
 import { DomainService } from "../domain/domain.service";
 import * as os from "os";
 // Create promisified versions of pm2 functions
-const connect = promisify(pm2.connect.bind(pm2));
 const list = promisify(pm2.list.bind(pm2));
 const start = promisify(pm2.start.bind(pm2));
 const stop = promisify(pm2.stop.bind(pm2));
 const restart = promisify(pm2.restart.bind(pm2));
 const reload = promisify(pm2.reload.bind(pm2));
-const disconnect = promisify(pm2.disconnect.bind(pm2));
 const del = promisify(pm2.delete.bind(pm2));
 
 @Injectable()
-export class PM2Service implements OnModuleInit {
+export class PM2Service implements OnModuleInit, OnModuleDestroy {
   private nvmDir: string;
+  private connectionPromise: Promise<void> | null = null;
+  private isConnected = false;
+  private isShuttingDown = false;
   constructor(
     private configService: ConfigService,
     private githubService: GitHubService,
@@ -53,7 +55,138 @@ export class PM2Service implements OnModuleInit {
 
   async onModuleInit() {
     this.logger.log("PM2Service initialized, starting autostart services...");
-    this.startAutostartServices();
+    try {
+      await this.ensureConnection();
+    } catch (error) {
+      this.logger.error("Error connecting to PM2 during initialization:", error);
+    }
+    // Fire-and-forget: don't block bootstrap waiting for autostart deploys
+    this.startAutostartServices().catch((error) => {
+      this.logger.error("Error in autostart services:", error);
+    });
+  }
+
+  async onModuleDestroy() {
+    this.logger.log("PM2Service shutting down...");
+    this.isShuttingDown = true;
+    await this.safeDisconnect();
+  }
+
+  private async ensureConnection(): Promise<void> {
+    if (this.isShuttingDown) {
+      throw new Error("PM2Service is shutting down");
+    }
+
+    if (this.isConnected) {
+      return;
+    }
+
+    if (this.connectionPromise) {
+      return this.connectionPromise;
+    }
+
+    this.connectionPromise = this.connectToPM2();
+    try {
+      await this.connectionPromise;
+      this.isConnected = true;
+    } catch (error) {
+      this.connectionPromise = null;
+      throw error;
+    }
+
+    return;
+  }
+
+  private async connectToPM2(): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      pm2.connect((err) => {
+        if (err) {
+          this.logger.error("Failed to connect to PM2:", err);
+          reject(err);
+        } else {
+          this.logger.log("Successfully connected to PM2");
+          resolve();
+        }
+      });
+    });
+  }
+
+  private async safeDisconnect(): Promise<void> {
+    if (!this.isConnected) {
+      return;
+    }
+
+    try {
+      pm2.disconnect();
+      this.isConnected = false;
+      this.connectionPromise = null;
+      this.logger.log("Disconnected from PM2");
+    } catch (error) {
+      this.logger.error("Error disconnecting from PM2:", error);
+      this.isConnected = false;
+      this.connectionPromise = null;
+    }
+  }
+
+  private isConnectionError(error: any): boolean {
+    if (!error) return false;
+    const message = error.message || String(error);
+    const code = error.code;
+    
+    // PM2 RPC/connection-level errors that mean the command never reached PM2
+    return (
+      message.includes("not connected") ||
+      message.includes("RPC") ||
+      message.includes("Cannot read properties of null") ||
+      message.includes("sock") ||
+      code === "ECONNREFUSED" ||
+      code === "ENOENT" ||
+      code === "EPIPE" ||
+      message.includes("Connection closed")
+    );
+  }
+
+  private async withPM2<T>(
+    operation: () => Promise<T>,
+    operationName: string,
+    allowRetry = true,
+  ): Promise<T> {
+    const maxRetries = allowRetry ? 1 : 0;
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        await this.ensureConnection();
+        return await operation();
+      } catch (error) {
+        lastError = error;
+        
+        // Only retry on connection-level errors where the operation didn't reach PM2
+        const isConnError = this.isConnectionError(error);
+        
+        if (isConnError && attempt < maxRetries) {
+          this.logger.warn(
+            `PM2 operation '${operationName}' failed with connection error (attempt ${attempt + 1}/${maxRetries + 1}), retrying...`,
+            error,
+          );
+          // Mark connection as broken and clear promise so next ensureConnection reconnects
+          this.isConnected = false;
+          this.connectionPromise = null;
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        } else {
+          // App-level error or non-retryable: rethrow immediately without touching connection state
+          this.logger.error(
+            `PM2 operation '${operationName}' failed:`,
+            error,
+          );
+          throw error;
+        }
+      }
+    }
+
+    throw new Error(
+      `PM2 operation '${operationName}' failed after ${maxRetries + 1} attempts: ${lastError?.message || "Unknown error"}`,
+    );
   }
 
   async startAutostartServices(): Promise<void> {
@@ -255,9 +388,11 @@ export class PM2Service implements OnModuleInit {
     // Stop and delete service if running
     if (service.pm2AppName) {
       try {
-        await connect();
-        await del(service.pm2AppName);
-        await disconnect();
+        await this.withPM2(
+          async () => await del(service.pm2AppName),
+          `delete-${service.pm2AppName}`,
+          false, // Don't retry delete - non-idempotent
+        );
       } catch (error) {
         this.logger.error(`Error stopping service ${service.name}:`, error);
       }
@@ -404,9 +539,10 @@ export class PM2Service implements OnModuleInit {
     }
 
     try {
-      await connect();
-      await stop(service.pm2AppName);
-      await disconnect();
+      await this.withPM2(
+        async () => await stop(service.pm2AppName),
+        `stop-${service.pm2AppName}`,
+      );
 
       service.status = ServiceStatus.STOPPED;
       await service.save();
@@ -424,9 +560,10 @@ export class PM2Service implements OnModuleInit {
     }
 
     try {
-      await connect();
-      await restart(service.pm2AppName);
-      await disconnect();
+      await this.withPM2(
+        async () => await restart(service.pm2AppName),
+        `restart-${service.pm2AppName}`,
+      );
 
       service.status = ServiceStatus.ONLINE;
       await service.save();
@@ -510,9 +647,10 @@ export class PM2Service implements OnModuleInit {
         );
       } else {
         // Use PM2 reload for zero-downtime restart
-        await connect();
-        await reload(service.pm2AppName);
-        await disconnect();
+        await this.withPM2(
+          async () => await reload(service.pm2AppName),
+          `reload-${service.pm2AppName}`,
+        );
         this.logger.log(`Service ${service.name} reloaded successfully`);
       }
 
@@ -869,8 +1007,6 @@ export class PM2Service implements OnModuleInit {
 
     const appName = `${service.name}-${service.activeEnvironment}`;
 
-    await connect();
-
     let startConfig: any = {
       name: appName,
       env: env.variables,
@@ -925,13 +1061,17 @@ export class PM2Service implements OnModuleInit {
     this.logger.log(
       `Starting PM2 process for ${service.name}... ${startConfig.script} ${startConfig.args}`,
     );
-    await start(startConfig);
+    
+    await this.withPM2(
+      async () => await start(startConfig),
+      `start-${appName}`,
+      false, // Don't retry start - non-idempotent
+    );
 
     this.logger.log(
       `Service ${service.name} started with PM2 app name: ${appName}`,
     );
 
-    await disconnect();
     return appName;
   }
 
@@ -1059,9 +1199,10 @@ export class PM2Service implements OnModuleInit {
 
   private async updateServicesStatus(services: Service[]): Promise<void> {
     try {
-      await connect();
-      const processes = await list();
-      await disconnect();
+      const processes = await this.withPM2(
+        async () => await list(),
+        "list-for-status-update",
+      );
 
       // Create a map of PM2 processes grouped by app name
       const processMap = new Map();
@@ -1149,9 +1290,10 @@ export class PM2Service implements OnModuleInit {
     }
 
     try {
-      await connect();
-      const processes = await list();
-      await disconnect();
+      const processes = await this.withPM2(
+        async () => await list(),
+        `list-for-metrics-${service.pm2AppName}`,
+      );
 
       const serviceProcesses = processes.filter(
         (p) => p.name === service.pm2AppName,
@@ -1285,9 +1427,10 @@ export class PM2Service implements OnModuleInit {
 
   private async needsPM2ProcessRecreation(service: Service): Promise<boolean> {
     try {
-      await connect();
-      const processes = await list();
-      await disconnect();
+      const processes = await this.withPM2(
+        async () => await list(),
+        `list-for-recreation-check-${service.pm2AppName}`,
+      );
 
       const appProcesses = processes.filter(
         (p) => p.name === service.pm2AppName,
@@ -1361,9 +1504,11 @@ export class PM2Service implements OnModuleInit {
 
   private async deletePM2ProcessByAppName(pm2AppName: string): Promise<void> {
     try {
-      await connect();
-      await del(pm2AppName);
-      await disconnect();
+      await this.withPM2(
+        async () => await del(pm2AppName),
+        `delete-by-name-${pm2AppName}`,
+        false, // Don't retry delete - non-idempotent
+      );
       this.logger.log(`Deleted PM2 process with app name: ${pm2AppName}`);
     } catch (error) {
       this.logger.error(
